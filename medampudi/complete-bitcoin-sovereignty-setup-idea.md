@@ -1,26 +1,49 @@
-# Complete Bitcoin Sovereignty Stack Setup Guide
-## From Fresh Server to Full Bitcoin Sovereignty
+# 🚀 Bitcoin Sovereignty Migration: Contabo → OVH
+## Complete Setup Guide for Rajesh's Family Bitcoin Infrastructure
+
+### 💰 Cost Savings Achieved
+**Moving from Contabo ($54/month) to OVH SYS-LE-1 ($34/month)**
+- **Monthly Savings**: $20 (37% reduction)
+- **Annual Savings**: $240
+- **Storage Increase**: 1.5TB → 4TB (2.5x more space)
+
+### 🎯 OVH Server Details
+**Recommended: SYS-LE-1**
+- **CPU**: Intel Atom C2750 (8 cores/8 threads @ 2.4GHz)
+- **RAM**: 16GB (sufficient for family Bitcoin infrastructure)
+- **Storage**: 2×4TB HDD RAID-1 (4TB usable)
+- **Price**: ₹2,852/month (~$34/month)
+- **Location**: Mumbai/Pune (better latency from India)
 
 ### Prerequisites
-- Contabo Storage VPS 50 or similar (minimum: 8 CPU, 32GB RAM, 1TB storage)
+- OVH SYS-LE-1 server or similar (minimum: 8 CPU, 16GB RAM, 4TB storage)
 - Domain name with Cloudflare DNS management
 - Basic Linux knowledge
+- Existing Contabo server data for migration
 
-### Configuration Variables
-Set these according to your needs:
+### 👨‍👩‍👧‍👦 Family Configuration Variables
+Set these for your family setup:
 ```bash
-# CHANGE THESE VALUES
-DOMAIN_NAME="yourdomain.com"
-BTCPAY_DOMAIN="pay.yourdomain.com"
+# CHANGE THESE VALUES FOR YOUR FAMILY
+DOMAIN_NAME="your-bitcoin-domain.com"
+BTCPAY_DOMAIN="pay.your-bitcoin-domain.com"
 NODE_SUBDOMAIN="node"
-EMAIL="your-email@domain.com"
+EMAIL="rajesh@your-email.com"
+FAMILY_NAME="Rajesh-Family"
 
-# Passwords - CHANGE ALL OF THESE
-BITCOIN_RPC_USER="your_rpc_user"
-BITCOIN_RPC_PASS="your_secure_rpc_password_2025"
-POSTGRES_PASS="your_postgres_password_2025"
-MARIADB_ROOT_PASS="your_mariadb_root_2025"
-MARIADB_MEMPOOL_PASS="your_mempool_password_2025"
+# Family Members for Access Management
+FAMILY_MEMBERS="Rajesh Apoorva Meera Vidur Ravi Bhavani Ramya Sumanth Viren Naina"
+
+# Passwords - CHANGE ALL OF THESE - Make them strong!
+BITCOIN_RPC_USER="family_rpc_user"
+BITCOIN_RPC_PASS="YourSecureRPCPassword2025!"
+POSTGRES_PASS="FamilyPostgresPass2025!"
+MARIADB_ROOT_PASS="FamilyMariaDBRoot2025!"
+MARIADB_MEMPOOL_PASS="FamilyMempoolPass2025!"
+
+# India-specific settings
+TIMEZONE="Asia/Kolkata"
+CURRENCY_DISPLAY="INR"
 ```
 
 ## Phase 1: Initial Server Setup
@@ -54,8 +77,8 @@ sudo apt install -y \
     software-properties-common \
     jq
 
-# Set timezone
-sudo timedatectl set-timezone Asia/Kolkata
+# Set timezone to India
+sudo timedatectl set-timezone ${TIMEZONE}
 
 # Configure swap
 sudo fallocate -l 4G /swapfile
@@ -78,6 +101,60 @@ PermitRootLogin no
 PasswordAuthentication no
 PubkeyAuthentication yes
 AllowUsers admin
+```
+
+## Phase 1.5: Data Migration from Contabo (Optional)
+
+⚠️ **Important**: If you're migrating from existing Contabo server, do this BEFORE setting up services on OVH.
+
+### Step 1.5.1: Backup Essential Data from Contabo
+```bash
+# SSH into your Contabo server
+ssh admin@YOUR_CONTABO_IP
+
+# Create backup directory
+mkdir -p /tmp/migration-backup
+
+# Backup Bitcoin blockchain data (CRITICAL - saves days of sync)
+sudo tar -czf /tmp/migration-backup/bitcoin_chainstate.tar.gz \
+    /opt/bitcoin/data/bitcoin/chainstate \
+    /opt/bitcoin/data/bitcoin/blocks
+
+# Backup Lightning channel data
+sudo tar -czf /tmp/migration-backup/lightning_data.tar.gz \
+    /opt/bitcoin/btcpay/btcpayserver-docker/btcpay_datadir/lightning
+
+# Backup BTCPay configuration
+sudo tar -czf /tmp/migration-backup/btcpay_config.tar.gz \
+    /opt/bitcoin/btcpay/btcpayserver-docker/.env \
+    /opt/bitcoin/btcpay/btcpayserver-docker/btcpay_datadir
+
+# Backup custom configurations
+cp /opt/bitcoin/configs/* /tmp/migration-backup/
+cp /opt/bitcoin/docker-compose.yml /tmp/migration-backup/
+
+# Transfer to OVH server (run this on Contabo)
+rsync -avz --progress /tmp/migration-backup/ admin@YOUR_OVH_IP:/tmp/restore-data/
+```
+
+### Step 1.5.2: Restore Data on OVH Server
+```bash
+# On OVH server - restore blockchain data (saves 3-5 days sync time)
+sudo mkdir -p /opt/bitcoin/data/bitcoin
+cd /tmp/restore-data
+sudo tar -xzf bitcoin_chainstate.tar.gz -C /opt/bitcoin/data/bitcoin/
+
+# Restore Lightning data
+sudo mkdir -p /opt/bitcoin/btcpay/btcpayserver-docker/btcpay_datadir
+sudo tar -xzf lightning_data.tar.gz -C /opt/bitcoin/btcpay/btcpayserver-docker/
+
+# Restore BTCPay config
+sudo tar -xzf btcpay_config.tar.gz -C /opt/bitcoin/btcpay/btcpayserver-docker/
+
+# Set proper ownership
+sudo chown -R $USER:$USER /opt/bitcoin
+
+echo "✅ Data migration complete - Bitcoin sync should resume from current block!"
 ```
 
 ## Phase 2: Tailscale Setup (Secure SSH Access)
