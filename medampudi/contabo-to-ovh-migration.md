@@ -30,7 +30,7 @@ sudo -l # Should show sudo permissions
 ### Step 1.2: Run Automated Setup Script
 ```bash
 # Download and run the automated setup
-wget https://raw.githubusercontent.com/your-repo/medampudi/ovh-automated-setup.sh
+wget https://raw.githubusercontent.com/medampudi/btcpayContaboserver/refs/heads/main/medampudi/ovh-automated-setup.sh
 chmod +x ovh-automated-setup.sh
 
 # Edit configuration variables first!

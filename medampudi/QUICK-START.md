@@ -13,7 +13,7 @@
 ### ⚡ One-Command Setup
 ```bash
 # Download and run the automated setup script
-wget -O setup.sh https://raw.githubusercontent.com/your-repo/btcpayContaboserver/main/medampudi/ovh-automated-setup.sh
+wget -O setup.sh https://raw.githubusercontent.com/medampudi/btcpayContaboserver/refs/heads/main/medampudi/ovh-automated-setup.sh
 chmod +x setup.sh
 
 # IMPORTANT: Edit configuration first!
@@ -45,7 +45,7 @@ cd /opt/bitcoin
 ### ☁️ Setup Tailscale & Cloudflare
 ```bash
 # Download and run network setup
-wget -O network-setup.sh https://raw.githubusercontent.com/your-repo/btcpayContaboserver/main/medampudi/tailscale-cloudflare-setup.sh
+wget -O network-setup.sh https://raw.githubusercontent.com/medampudi/btcpayContaboserver/refs/heads/main/medampudi/tailscale-cloudflare-setup.sh
 chmod +x network-setup.sh
 
 # Edit configuration first!
