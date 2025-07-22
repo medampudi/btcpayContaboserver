@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repository contains a comprehensive guide for setting up a complete Bitcoin sovereignty stack on a Contabo server. The setup includes Bitcoin Core, BTCPay Server, Lightning Network, Mempool explorer, BTC RPC Explorer, and Fulcrum Electrum server with security-focused architecture.
+This repository contains comprehensive guides for Bitcoin sovereignty infrastructure:
+1. **Original Setup**: Complete Bitcoin stack on Contabo server (Bitcoin Core, BTCPay Server, Lightning Network, Mempool explorer, BTC RPC Explorer, and Fulcrum Electrum server)
+2. **Family Setup**: General guides for families worldwide to achieve Bitcoin financial sovereignty
+3. **Business Setup**: Frappe Framework-based Bitcoin infrastructure for businesses (general and India-specific)
+4. **Server Migration**: Analysis and recommendations for migrating from Contabo to OVH for better value
 
 ## Architecture & Security Model
 
@@ -107,17 +111,22 @@ crontab -l
 
 ## Infrastructure Requirements
 
-### Minimum System Specs
-- 8 CPU cores
-- 32GB RAM
-- 1TB+ storage
-- Stable internet connection
+### Current Server
+- **Contabo VPS**: $54/month (EU hosted)
+- 8 CPU cores, 32GB RAM, 1.5TB storage
+
+### Recommended Alternatives (OVH)
+- **Family Budget**: SYS-LE-1 @ ₹2,852/month ($34) - 16GB RAM, 4TB storage
+- **Family Standard**: Eco-8T @ ₹3,518/month ($42) - 32GB RAM, 2TB storage  
+- **Small Business**: ADVANCE-1 @ ₹8,325/month ($100) - 32GB RAM, SSD
+- **Growing Business**: ADVANCE-3 @ ₹13,003/month ($156) - 128GB RAM, SSD
 
 ### Dependencies
 - Docker & Docker Compose
 - Tailscale VPN client
 - Cloudflare account with domain
 - Fail2ban for intrusion prevention
+- Frappe Framework (for business setups)
 
 ## Service Dependencies
 
@@ -179,30 +188,87 @@ crontab -l
 ```
 ├── family-setup/              # General family Bitcoin sovereignty setup
 │   ├── family-bitcoin-sovereignty-guide.md
+│   ├── indian-family-bitcoin-guide.md
 │   ├── family-bitcoin-architecture.md
+│   ├── family-tax-tracker-system.md
 │   └── family-bitcoin-quickstart.sh
 │
-└── rajesh/                    # Contabo server-specific files
-    ├── complete-bitcoin-sovereignty-setup-idea.md
-    ├── family-guide.md
-    ├── tailscale-family-setup.md
-    ├── simple-tunnel-config.yml
-    ├── family-status.sh
-    └── tailscale-family-access.sh
+├── business-setup/            # Business Bitcoin infrastructure (Frappe-based)
+│   ├── frappe-bitcoin-infrastructure.md
+│   ├── frappe-bitcoin-apps.md
+│   ├── docker-compose-frappe.yml
+│   └── frappe_bitcoin_services/
+│
+├── business-india/            # Indian business specific setup
+│   ├── frappe-indian-bitcoin-infrastructure.md
+│   ├── gst-tds-compliance.md
+│   └── indian-exchange-integration.md
+│
+├── rajesh/                    # Contabo server-specific files
+│   ├── complete-bitcoin-sovereignty-setup-idea.md
+│   ├── family-guide.md
+│   ├── tailscale-family-setup.md
+│   ├── simple-tunnel-config.yml
+│   ├── family-status.sh
+│   └── tailscale-family-access.sh
+│
+└── (root directory)           # Server analysis and cost files
+    ├── ovh-server-recommendations.md
+    ├── sys-le-1-analysis.md
+    ├── ovh-pricing-extracted.md
+    └── infrastructure-cost-analysis.md
 ```
 
-### Documentation
+### Key Documentation
+
+#### Original Setup
 - `rajesh/complete-bitcoin-sovereignty-setup-idea.md` - Full 11-phase Contabo deployment guide
 - `rajesh/family-guide.md` - User guide for family members
 - `rajesh/tailscale-family-setup.md` - Tailscale setup for family access
-- `family-setup/` - General guides any family can use for Bitcoin sovereignty
+
+#### Family Setups
+- `family-setup/family-bitcoin-sovereignty-guide.md` - Universal family Bitcoin guide
+- `family-setup/indian-family-bitcoin-guide.md` - India-specific family guide with tax compliance
+- `family-setup/family-tax-tracker-system.md` - Automated tax tracking for families
+
+#### Business Setups (Frappe Framework)
+- `business-setup/frappe-bitcoin-infrastructure.md` - General business Bitcoin infrastructure
+- `business-india/frappe-indian-bitcoin-infrastructure.md` - Indian business with GST/TDS compliance
+- All business setups use Frappe Framework for minimal code development
+
+#### Server Analysis (in root directory)
+- `ovh-server-recommendations.md` - Detailed OVH server comparison
+- `sys-le-1-analysis.md` - Specific analysis of SYS-LE-1 for family use
+- `infrastructure-cost-analysis.md` - Complete cost breakdown for all setups
+- `ovh-pricing-extracted.md` - Extracted pricing from OVH screenshots
 
 ### Configuration Templates
 - `rajesh/simple-tunnel-config.yml` - Cloudflare Tunnel config (BTCPay only)
+- `business-setup/docker-compose-frappe.yml` - Frappe + Bitcoin services
 
 ### Utility Scripts
 - `rajesh/family-status.sh` - Comprehensive service health dashboard
 - `rajesh/tailscale-family-access.sh` - Generate shareable access information
 - `family-setup/family-bitcoin-quickstart.sh` - Universal family setup script
 
-This setup prioritizes security through network isolation, minimal attack surface, and defense in depth while maintaining full Bitcoin sovereignty and self-custody capabilities. Family accessibility is integrated with security-first design.
+## Important Notes for Future Claude Sessions
+
+### Key Decisions Made
+1. **Frappe Framework**: All business applications use Frappe for minimal code development
+2. **Server Recommendation**: OVH SYS-LE-1 @ ₹2,852/month ($34) is best value for families
+3. **Tax Compliance**: Automated tax tracking system created for multiple jurisdictions
+4. **Indian Compliance**: Specific GST/TDS handling for Indian businesses
+
+### Cost Savings Achieved
+- Current Contabo: $54/month
+- Recommended OVH SYS-LE-1: $34/month  
+- **Monthly Savings: $20 (37%)**
+- **Annual Savings: $240**
+
+### Project Evolution
+1. Started with personal Contabo server setup
+2. Expanded to general family guides (worldwide + India)
+3. Added business infrastructure (Frappe-based)
+4. Analyzed server costs and recommended migration to OVH
+
+This setup prioritizes security through network isolation, minimal attack surface, and defense in depth while maintaining full Bitcoin sovereignty and self-custody capabilities. Family accessibility is integrated with security-first design, and business features leverage Frappe Framework for rapid development.
