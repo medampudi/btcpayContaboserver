@@ -32,7 +32,7 @@ This repository contains a comprehensive guide for setting up a complete Bitcoin
 ## Key Configuration Files
 
 ### Primary Setup Guide
-- `complete-bitcoin-sovereignty-setup-idea.md` - Main deployment guide with 11 phases
+- `rajesh/complete-bitcoin-sovereignty-setup-idea.md` - Main Contabo deployment guide with 11 phases
 
 ### Generated Configurations (during setup)
 - `docker-compose.yml` - Main orchestration file
@@ -151,6 +151,7 @@ crontab -l
 ### Health Checks
 - Automated via cron: `/opt/bitcoin/health-check.sh` (every 15 min)
 - Manual status: `/opt/bitcoin/status.sh`
+- Family-friendly status: `/opt/bitcoin/family-status.sh`
 - Backup verification: Monthly restore testing recommended
 
 ### Update Procedures
@@ -158,4 +159,50 @@ crontab -l
 - Docker images: `docker compose pull && docker compose up -d`
 - BTCPay updates: Follow BTCPay Docker upgrade process
 
-This setup prioritizes security through network isolation, minimal attack surface, and defense in depth while maintaining full Bitcoin sovereignty and self-custody capabilities.
+## Family Access Management
+
+### Tailscale Setup for Family Members
+- Send invitations: `https://login.tailscale.com/admin/machines`
+- Generate access info: `./rajesh/tailscale-family-access.sh`
+- Family setup guide: `rajesh/tailscale-family-setup.md`
+- User guide: `rajesh/family-guide.md`
+
+### Family Service URLs (via Tailscale)
+- Mempool Explorer: `http://[tailscale-ip]:8080`
+- Bitcoin Explorer: `http://[tailscale-ip]:3002`
+- Lightning Dashboard: `http://[tailscale-ip]:3000`
+- Electrum Server: `[tailscale-ip]:50001` (TCP) or `:50002` (SSL)
+
+## Project Files Reference
+
+### Folder Structure
+```
+├── family-setup/              # General family Bitcoin sovereignty setup
+│   ├── family-bitcoin-sovereignty-guide.md
+│   ├── family-bitcoin-architecture.md
+│   └── family-bitcoin-quickstart.sh
+│
+└── rajesh/                    # Contabo server-specific files
+    ├── complete-bitcoin-sovereignty-setup-idea.md
+    ├── family-guide.md
+    ├── tailscale-family-setup.md
+    ├── simple-tunnel-config.yml
+    ├── family-status.sh
+    └── tailscale-family-access.sh
+```
+
+### Documentation
+- `rajesh/complete-bitcoin-sovereignty-setup-idea.md` - Full 11-phase Contabo deployment guide
+- `rajesh/family-guide.md` - User guide for family members
+- `rajesh/tailscale-family-setup.md` - Tailscale setup for family access
+- `family-setup/` - General guides any family can use for Bitcoin sovereignty
+
+### Configuration Templates
+- `rajesh/simple-tunnel-config.yml` - Cloudflare Tunnel config (BTCPay only)
+
+### Utility Scripts
+- `rajesh/family-status.sh` - Comprehensive service health dashboard
+- `rajesh/tailscale-family-access.sh` - Generate shareable access information
+- `family-setup/family-bitcoin-quickstart.sh` - Universal family setup script
+
+This setup prioritizes security through network isolation, minimal attack surface, and defense in depth while maintaining full Bitcoin sovereignty and self-custody capabilities. Family accessibility is integrated with security-first design.
