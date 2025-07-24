@@ -24,46 +24,46 @@ log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 # =============================================================================
 
 # Domain Configuration
-DOMAIN_NAME="simbotix.com"              # Your main domain
-BTCPAY_DOMAIN="pay.simbotix.com"        # BTCPay subdomain
-EMAIL="medampudi@gmail.com"             # Your email
-FAMILY_NAME="Medampudi-Family"          # Family identifier
+DOMAIN_NAME="${DOMAIN_NAME:-simbotix.com}"
+BTCPAY_DOMAIN="${BTCPAY_DOMAIN:-pay.simbotix.com}"
+EMAIL="${EMAIL:-medampudi@gmail.com}"
+FAMILY_NAME="${FAMILY_NAME:-Medampudi-Family}"
 
 # Server Configuration
-SERVER_HOSTNAME="medampudi-bitcoin"     # Server hostname
-SWAP_SIZE="8G"                          # Swap file size
-TIMEZONE="Asia/Kolkata"                 # Timezone
-CURRENCY_DISPLAY="INR"                  # Display currency
+SERVER_HOSTNAME="${SERVER_HOSTNAME:-medampudi-bitcoin}"
+SWAP_SIZE="${SWAP_SIZE:-8G}"
+TIMEZONE="${TIMEZONE:-Asia/Kolkata}"
+CURRENCY_DISPLAY="${CURRENCY_DISPLAY:-INR}"
 
 # Security Configuration
-SSH_PORT="22"                           # SSH port (change for security)
-ADMIN_USER="admin"                      # Admin username
+SSH_PORT="${SSH_PORT:-22}"
+ADMIN_USER="${ADMIN_USER:-admin}"
 
 # Bitcoin Configuration
-BITCOIN_RPC_USER="medampudi_rpc_user"
-BITCOIN_RPC_PASS="SecureMedampudiRPC2025!"
-BITCOIN_MAX_CONNECTIONS="125"
-BITCOIN_DBCACHE="4000"                  # MB for bitcoin database cache
-BITCOIN_MAXMEMPOOL="2000"               # MB for mempool
+BITCOIN_RPC_USER="${BITCOIN_RPC_USER:-medampudi_rpc_user}"
+BITCOIN_RPC_PASS="${BITCOIN_RPC_PASS:-SecureMedampudiRPC2025!}"
+BITCOIN_MAX_CONNECTIONS="${BITCOIN_MAX_CONNECTIONS:-125}"
+BITCOIN_DBCACHE="${BITCOIN_DBCACHE:-4000}"
+BITCOIN_MAXMEMPOOL="${BITCOIN_MAXMEMPOOL:-2000}"
 
 # Database Passwords
-POSTGRES_PASS="MedampudiPostgres2025!"
-MARIADB_ROOT_PASS="MedampudiMariaRoot2025!"
-MARIADB_MEMPOOL_PASS="MedampudiMempool2025!"
+POSTGRES_PASS="${POSTGRES_PASS:-MedampudiPostgres2025!}"
+MARIADB_ROOT_PASS="${MARIADB_ROOT_PASS:-MedampudiMariaRoot2025!}"
+MARIADB_MEMPOOL_PASS="${MARIADB_MEMPOOL_PASS:-MedampudiMempool2025!}"
 
-# API Keys - Get these from respective services
-TAILSCALE_AUTHKEY=""  # Get from https://login.tailscale.com/admin/settings/keys
-CLOUDFLARE_API_TOKEN=""  # Get from Cloudflare dashboard
-CLOUDFLARE_ZONE_ID=""    # Your domain's zone ID in Cloudflare
-CLOUDFLARE_ACCOUNT_ID="" # Your Cloudflare account ID
+# API Keys
+TAILSCALE_AUTHKEY="${TAILSCALE_AUTHKEY:-}"
+CLOUDFLARE_API_TOKEN="${CLOUDFLARE_API_TOKEN:-}"
+CLOUDFLARE_ZONE_ID="${CLOUDFLARE_ZONE_ID:-}"
+CLOUDFLARE_ACCOUNT_ID="${CLOUDFLARE_ACCOUNT_ID:-}"
 
-# Family Members for Access Management
-FAMILY_MEMBERS="Rajesh Apoorva Meera Vidur Ravi Bhavani Ramya Sumanth Viren Naina"
+# Family Members
+FAMILY_MEMBERS="${FAMILY_MEMBERS:-Rajesh Apoorva Meera Vidur}"
 
 # Installation Options
-SKIP_BITCOIN_SYNC="false"  # Set to true if restoring from backup
-ENABLE_TOR="false"         # Enable Tor support
-ENABLE_I2P="false"         # Enable I2P support
+SKIP_BITCOIN_SYNC="${SKIP_BITCOIN_SYNC:-false}"
+ENABLE_TOR="${ENABLE_TOR:-false}"
+ENABLE_I2P="${ENABLE_I2P:-false}"
 
 # =============================================================================
 # VALIDATION SECTION
@@ -95,16 +95,6 @@ validate_config() {
         exit 1
     fi
     
-    # Check if passwords are still default
-    if [[ "$BITCOIN_RPC_PASS" == "YourSecureRPCPassword2025!" ]]; then
-        log_warning "Using default passwords is not secure! Please change them."
-        read -p "Continue with default passwords? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
-    fi
-    
     log_success "Configuration validated"
 }
 
@@ -132,7 +122,7 @@ prepare_system() {
         software-properties-common apt-transport-https \
         ca-certificates gnupg lsb-release \
         jq moreutils unzip python3-pip \
-        mailutils postfix
+        mailutils postfix bc
     
     # Configure swap
     if [[ ! -f /swapfile ]]; then
@@ -227,33 +217,6 @@ port = $SSH_PORT
 filter = sshd
 logpath = /var/log/auth.log
 maxretry = 3
-
-[nginx-http-auth]
-enabled = true
-filter = nginx-http-auth
-port = http,https
-logpath = /var/log/nginx/error.log
-
-[nginx-noscript]
-enabled = true
-port = http,https
-filter = nginx-noscript
-logpath = /var/log/nginx/access.log
-maxretry = 6
-
-[nginx-badbots]
-enabled = true
-port = http,https
-filter = nginx-badbots
-logpath = /var/log/nginx/access.log
-maxretry = 2
-
-[nginx-noproxy]
-enabled = true
-port = http,https
-filter = nginx-noproxy
-logpath = /var/log/nginx/access.log
-maxretry = 2
 EOF
 
     systemctl restart fail2ban
@@ -393,35 +356,9 @@ setup_cloudflare() {
         # Auto-create tunnel using API
         TUNNEL_NAME="bitcoin-${FAMILY_NAME,,}"
         
-        # Create tunnel via API
-        TUNNEL_RESPONSE=$(curl -X POST "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/tunnels" \
-            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-            -H "Content-Type: application/json" \
-            --data "{\"name\":\"${TUNNEL_NAME}\",\"tunnel_secret\":\"$(openssl rand -base64 32)\"}")
-        
-        TUNNEL_ID=$(echo $TUNNEL_RESPONSE | jq -r '.result.id')
-        TUNNEL_TOKEN=$(echo $TUNNEL_RESPONSE | jq -r '.result.token')
-        
-        if [[ -n "$TUNNEL_ID" ]] && [[ "$TUNNEL_ID" != "null" ]]; then
-            # Create credentials file
-            cat > /etc/cloudflared/${TUNNEL_ID}.json <<EOF
-{
-    "AccountTag": "${CLOUDFLARE_ACCOUNT_ID}",
-    "TunnelSecret": "${TUNNEL_TOKEN}",
-    "TunnelID": "${TUNNEL_ID}"
-}
-EOF
-            
-            # Create DNS record
-            curl -X POST "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/dns_records" \
-                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-                -H "Content-Type: application/json" \
-                --data "{\"type\":\"CNAME\",\"name\":\"pay\",\"content\":\"${TUNNEL_ID}.cfargotunnel.com\",\"proxied\":true}"
-            
-            log_success "Cloudflare tunnel created: $TUNNEL_ID"
-        else
-            log_warning "Could not create tunnel automatically. Manual setup required."
-        fi
+        # For now, just prepare for manual setup
+        TUNNEL_ID="YOUR_TUNNEL_ID"
+        log_warning "Cloudflare tunnel needs manual setup - API creation not implemented yet"
     else
         log_warning "Cloudflare API credentials not provided. Manual tunnel setup required."
         TUNNEL_ID="YOUR_TUNNEL_ID"
@@ -540,7 +477,7 @@ EOF
 EOF
 
     # Create docker-compose.yml
-    cat > /opt/bitcoin/docker-compose.yml <<'EOF'
+    cat > /opt/bitcoin/docker-compose.yml <<EOF
 version: '3.8'
 
 networks:
@@ -793,18 +730,6 @@ services:
         max-size: "10m"
         max-file: "3"
 EOF
-
-    # Fix the environment variable references in docker-compose.yml
-    sed -i "s/\${BITCOIN_RPC_USER}/$BITCOIN_RPC_USER/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${BITCOIN_RPC_PASS}/$BITCOIN_RPC_PASS/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${POSTGRES_PASS}/$POSTGRES_PASS/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${MARIADB_ROOT_PASS}/$MARIADB_ROOT_PASS/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${MARIADB_MEMPOOL_PASS}/$MARIADB_MEMPOOL_PASS/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${BITCOIN_MAX_CONNECTIONS}/$BITCOIN_MAX_CONNECTIONS/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${BITCOIN_DBCACHE}/$BITCOIN_DBCACHE/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${BITCOIN_MAXMEMPOOL}/$BITCOIN_MAXMEMPOOL/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${TAILSCALE_IP:-127.0.0.1}/$TAILSCALE_IP/g" /opt/bitcoin/docker-compose.yml
-    sed -i "s/\${CURRENCY_DISPLAY}/$CURRENCY_DISPLAY/g" /opt/bitcoin/docker-compose.yml
     
     chown -R $ADMIN_USER:$ADMIN_USER /opt/bitcoin
     
@@ -818,41 +743,44 @@ EOF
 create_monitoring_scripts() {
     log_info "Creating monitoring scripts..."
     
-    # Status script
-    cat > /opt/bitcoin/scripts/status.sh <<EOF
+    # Create directory
+    mkdir -p /opt/bitcoin/scripts
+    
+    # Status script with proper variable handling
+    cat > /opt/bitcoin/scripts/status.sh <<'SCRIPT_EOF'
 #!/bin/bash
 clear
 echo "=== Bitcoin Sovereignty Stack Status ==="
 echo "========================================"
 echo ""
 echo "=== System Information ==="
-echo "Hostname: \$(hostname)"
-echo "Uptime: \$(uptime -p)"
-echo "CPU Cores: \$(nproc)"
-echo "Memory: \$(free -h | grep Mem | awk '{print \$3 " / " \$2}')"
-echo "Swap: \$(free -h | grep Swap | awk '{print \$3 " / " \$2}')"
+echo "Hostname: $(hostname)"
+echo "Uptime: $(uptime -p)"
+echo "CPU Cores: $(nproc)"
+echo "Memory: $(free -h | grep Mem | awk '{print $3 " / " $2}')"
+echo "Swap: $(free -h | grep Swap | awk '{print $3 " / " $2}')"
 echo ""
 echo "=== Disk Usage ==="
-df -h | grep -E "Filesystem|/opt/bitcoin|/\$" | awk '{printf "%-20s %5s %5s %5s %5s\\n", \$1, \$2, \$3, \$4, \$5}'
+df -h | grep -E "Filesystem|/opt/bitcoin|/$" | awk '{printf "%-20s %5s %5s %5s %5s\n", $1, $2, $3, $4, $5}'
 echo ""
 echo "=== Bitcoin Core ==="
 if command -v docker &> /dev/null && docker ps | grep -q bitcoind; then
-    SYNC_INFO=\$(docker exec bitcoind bitcoin-cli -rpcuser=${BITCOIN_RPC_USER} -rpcpassword=${BITCOIN_RPC_PASS} getblockchaininfo 2>/dev/null)
-    if [ \$? -eq 0 ]; then
-        BLOCKS=\$(echo \$SYNC_INFO | jq -r '.blocks')
-        HEADERS=\$(echo \$SYNC_INFO | jq -r '.headers')
-        PROGRESS=\$(echo \$SYNC_INFO | jq -r '.verificationprogress')
-        PROGRESS_PCT=\$(echo "scale=2; \$PROGRESS * 100" | bc)
-        SIZE=\$(echo \$SYNC_INFO | jq -r '.size_on_disk')
-        SIZE_GB=\$(echo "scale=2; \$SIZE / 1073741824" | bc)
+    SYNC_INFO=$(docker exec bitcoind bitcoin-cli -rpcuser=BITCOIN_RPC_USER_PLACEHOLDER -rpcpassword=BITCOIN_RPC_PASS_PLACEHOLDER getblockchaininfo 2>/dev/null)
+    if [ $? -eq 0 ]; then
+        BLOCKS=$(echo $SYNC_INFO | jq -r '.blocks')
+        HEADERS=$(echo $SYNC_INFO | jq -r '.headers')
+        PROGRESS=$(echo $SYNC_INFO | jq -r '.verificationprogress')
+        PROGRESS_PCT=$(echo "scale=2; $PROGRESS * 100" | bc)
+        SIZE=$(echo $SYNC_INFO | jq -r '.size_on_disk')
+        SIZE_GB=$(echo "scale=2; $SIZE / 1073741824" | bc)
         
-        echo "Blocks: \$BLOCKS / \$HEADERS"
-        echo "Sync Progress: \${PROGRESS_PCT}%"
-        echo "Chain Size: \${SIZE_GB} GB"
+        echo "Blocks: $BLOCKS / $HEADERS"
+        echo "Sync Progress: ${PROGRESS_PCT}%"
+        echo "Chain Size: ${SIZE_GB} GB"
         
         # Get peer info
-        PEER_COUNT=\$(docker exec bitcoind bitcoin-cli -rpcuser=${BITCOIN_RPC_USER} -rpcpassword=${BITCOIN_RPC_PASS} getconnectioncount 2>/dev/null || echo "0")
-        echo "Connected Peers: \$PEER_COUNT"
+        PEER_COUNT=$(docker exec bitcoind bitcoin-cli -rpcuser=BITCOIN_RPC_USER_PLACEHOLDER -rpcpassword=BITCOIN_RPC_PASS_PLACEHOLDER getconnectioncount 2>/dev/null || echo "0")
+        echo "Connected Peers: $PEER_COUNT"
     else
         echo "Bitcoin Core: Starting up..."
     fi
@@ -862,35 +790,40 @@ fi
 echo ""
 echo "=== Docker Services ==="
 if command -v docker &> /dev/null; then
-    docker ps --format "table {{.Names}}\\t{{.Status}}\\t{{.State}}" | grep -E "NAME|bitcoind|fulcrum|mempool|btc-explorer|postgres|mempool-db"
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.State}}" | grep -E "NAME|bitcoind|fulcrum|mempool|btc-explorer|postgres|mempool-db"
 else
     echo "Docker not installed"
 fi
 echo ""
 echo "=== Network Services ==="
-echo "Firewall: \$(sudo ufw status | grep Status | awk '{print \$2}')"
-echo "Tailscale: \$(command -v tailscale &> /dev/null && (tailscale status | grep -q "Logged out" && echo "Not Connected" || echo "Connected: \$(tailscale ip -4)") || echo "Not Installed")"
-echo "Cloudflare: \$(systemctl is-active cloudflared)"
+echo "Firewall: $(sudo ufw status | grep Status | awk '{print $2}')"
+echo "Tailscale: $(command -v tailscale &> /dev/null && (tailscale status | grep -q "Logged out" && echo "Not Connected" || echo "Connected: $(tailscale ip -4)") || echo "Not Installed")"
+echo "Cloudflare: $(systemctl is-active cloudflared 2>/dev/null || echo "Not installed")"
 echo ""
 echo "=== Service URLs ==="
 if command -v tailscale &> /dev/null && tailscale status &> /dev/null; then
-    TAILSCALE_IP=\$(tailscale ip -4)
-    echo "BTCPay Server: https://${BTCPAY_DOMAIN}"
-    echo "Mempool Explorer: http://\$TAILSCALE_IP:8080"
-    echo "BTC RPC Explorer: http://\$TAILSCALE_IP:3002"
-    echo "Electrum Server: \$TAILSCALE_IP:50001"
+    TAILSCALE_IP=$(tailscale ip -4)
+    echo "BTCPay Server: https://BTCPAY_DOMAIN_PLACEHOLDER"
+    echo "Mempool Explorer: http://$TAILSCALE_IP:8080"
+    echo "BTC RPC Explorer: http://$TAILSCALE_IP:3002"
+    echo "Electrum Server: $TAILSCALE_IP:50001"
 fi
 echo ""
-echo "Last updated: \$(date)"
-EOF
+echo "Last updated: $(date)"
+SCRIPT_EOF
 
+    # Replace placeholders in status script
+    sed -i "s/BITCOIN_RPC_USER_PLACEHOLDER/${BITCOIN_RPC_USER}/g" /opt/bitcoin/scripts/status.sh
+    sed -i "s/BITCOIN_RPC_PASS_PLACEHOLDER/${BITCOIN_RPC_PASS}/g" /opt/bitcoin/scripts/status.sh
+    sed -i "s/BTCPAY_DOMAIN_PLACEHOLDER/${BTCPAY_DOMAIN}/g" /opt/bitcoin/scripts/status.sh
+    
     # Bitcoin check script
-    cat > /opt/bitcoin/scripts/check-bitcoin.sh <<EOF
+    cat > /opt/bitcoin/scripts/check-bitcoin.sh <<'SCRIPT_EOF'
 #!/bin/bash
 if docker ps | grep -q bitcoind; then
-    docker exec bitcoind bitcoin-cli \\
-        -rpcuser=${BITCOIN_RPC_USER} \\
-        -rpcpassword=${BITCOIN_RPC_PASS} \\
+    docker exec bitcoind bitcoin-cli \
+        -rpcuser=BITCOIN_RPC_USER_PLACEHOLDER \
+        -rpcpassword=BITCOIN_RPC_PASS_PLACEHOLDER \
         getblockchaininfo | jq '{
             chain: .chain,
             blocks: .blocks,
@@ -902,10 +835,14 @@ if docker ps | grep -q bitcoind; then
 else
     echo "Bitcoin Core is not running"
 fi
-EOF
+SCRIPT_EOF
 
+    # Replace placeholders
+    sed -i "s/BITCOIN_RPC_USER_PLACEHOLDER/${BITCOIN_RPC_USER}/g" /opt/bitcoin/scripts/check-bitcoin.sh
+    sed -i "s/BITCOIN_RPC_PASS_PLACEHOLDER/${BITCOIN_RPC_PASS}/g" /opt/bitcoin/scripts/check-bitcoin.sh
+    
     # Access info script
-    cat > /opt/bitcoin/scripts/access-info.sh <<EOF
+    cat > /opt/bitcoin/scripts/access-info.sh <<'SCRIPT_EOF'
 #!/bin/bash
 echo "=== Bitcoin Stack Access Information ==="
 echo "======================================="
@@ -923,113 +860,24 @@ if command -v tailscale &> /dev/null && tailscale status &> /dev/null; then
     echo "Electrum Server SSL: $TAILSCALE_IP:50002 (SSL)"
     echo "Bitcoin RPC:         $TAILSCALE_IP:8332"
     echo ""
-    echo "SSH Access:          ssh ${ADMIN_USER}@$TAILSCALE_IP"
+    echo "SSH Access:          ssh ADMIN_USER_PLACEHOLDER@$TAILSCALE_IP"
 else
     echo "Tailscale not connected. Please run: tailscale up"
 fi
 echo ""
 echo "=== Public Services ==="
-echo "BTCPay Server:       https://${BTCPAY_DOMAIN}"
+echo "BTCPay Server:       https://BTCPAY_DOMAIN_PLACEHOLDER"
 echo ""
 echo "=== Wallet Configuration ==="
 echo "For Electrum, Sparrow, or other wallets:"
 echo "Server: [Your Tailscale IP]"
 echo "Port: 50001 (TCP) or 50002 (SSL)"
 echo "No proxy needed within Tailscale network"
-EOF
+SCRIPT_EOF
 
-    # Backup script
-    cat > /opt/bitcoin/scripts/backup.sh <<'EOF'
-#!/bin/bash
-BACKUP_DIR="/opt/bitcoin/backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-LOG_FILE="/opt/bitcoin/logs/backup.log"
-
-# Create directories
-mkdir -p $BACKUP_DIR
-mkdir -p $(dirname $LOG_FILE)
-
-echo "[$(date)] Starting backup..." >> $LOG_FILE
-
-# Backup configurations
-tar -czf $BACKUP_DIR/configs_$DATE.tar.gz \
-    /opt/bitcoin/configs \
-    /opt/bitcoin/docker-compose.yml \
-    /opt/bitcoin/scripts \
-    2>> $LOG_FILE
-
-# Backup BTCPay data if exists
-if [ -d "/opt/bitcoin/btcpay" ]; then
-    cd /opt/bitcoin/btcpay/btcpayserver-docker
-    if [ -f "./btcpay-backup.sh" ]; then
-        ./btcpay-backup.sh $BACKUP_DIR/btcpay_$DATE.tar.gz >> $LOG_FILE 2>&1
-    fi
-fi
-
-# Backup Lightning channel state
-if docker ps | grep -q lightning; then
-    docker exec lightning lightning-cli listchannels > $BACKUP_DIR/lightning_channels_$DATE.json 2>> $LOG_FILE
-fi
-
-# Backup wallet info (not keys, just addresses)
-if docker ps | grep -q bitcoind; then
-    docker exec bitcoind bitcoin-cli -rpcuser=${BITCOIN_RPC_USER} -rpcpassword=${BITCOIN_RPC_PASS} listwallets > $BACKUP_DIR/wallets_$DATE.json 2>> $LOG_FILE
-fi
-
-# Keep only last 7 days of backups
-find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
-find $BACKUP_DIR -name "*.json" -mtime +7 -delete
-
-echo "[$(date)] Backup completed" >> $LOG_FILE
-echo "Backup completed: $DATE"
-EOF
-
-    # Health check script
-    cat > /opt/bitcoin/scripts/health-check.sh <<'EOF'
-#!/bin/bash
-ALERT_EMAIL="${EMAIL}"
-LOG_FILE="/opt/bitcoin/logs/health-check.log"
-
-mkdir -p $(dirname $LOG_FILE)
-
-# Check critical services
-CRITICAL_SERVICES=("bitcoind" "fulcrum" "mempool-api")
-ISSUES=""
-
-for service in "${CRITICAL_SERVICES[@]}"; do
-    if ! docker ps | grep -q $service; then
-        ISSUES="$ISSUES\n- Service $service is not running"
-    fi
-done
-
-# Check disk space
-DISK_USAGE=$(df -h /opt/bitcoin | awk 'NR==2 {print $(NF-1)}' | sed 's/%//')
-if [ $DISK_USAGE -gt 85 ]; then
-    ISSUES="$ISSUES\n- Disk usage critical: ${DISK_USAGE}%"
-fi
-
-# Check Bitcoin sync
-if docker ps | grep -q bitcoind; then
-    SYNC_PROGRESS=$(docker exec bitcoind bitcoin-cli -rpcuser=${BITCOIN_RPC_USER} -rpcpassword=${BITCOIN_RPC_PASS} getblockchaininfo 2>/dev/null | jq -r '.verificationprogress' || echo "0")
-    if (( $(echo "$SYNC_PROGRESS < 0.9999" | bc -l) )); then
-        SYNC_PCT=$(echo "scale=2; $SYNC_PROGRESS * 100" | bc)
-        echo "[$(date)] Bitcoin sync progress: ${SYNC_PCT}%" >> $LOG_FILE
-    fi
-fi
-
-# Send alert if issues found
-if [ -n "$ISSUES" ]; then
-    echo -e "Bitcoin Node Alert!\n$ISSUES" | mail -s "Bitcoin Node Issues - $HOSTNAME" $ALERT_EMAIL
-    echo "[$(date)] Issues found: $ISSUES" >> $LOG_FILE
-fi
-EOF
-
-    # Fix environment variables in scripts
-    sed -i "s/\${BITCOIN_RPC_USER}/$BITCOIN_RPC_USER/g" /opt/bitcoin/scripts/*.sh
-    sed -i "s/\${BITCOIN_RPC_PASS}/$BITCOIN_RPC_PASS/g" /opt/bitcoin/scripts/*.sh
-    sed -i "s/\${BTCPAY_DOMAIN}/$BTCPAY_DOMAIN/g" /opt/bitcoin/scripts/*.sh
-    sed -i "s/\${ADMIN_USER}/$ADMIN_USER/g" /opt/bitcoin/scripts/*.sh
-    sed -i "s/\${EMAIL}/$EMAIL/g" /opt/bitcoin/scripts/*.sh
+    # Replace placeholders
+    sed -i "s/ADMIN_USER_PLACEHOLDER/${ADMIN_USER}/g" /opt/bitcoin/scripts/access-info.sh
+    sed -i "s/BTCPAY_DOMAIN_PLACEHOLDER/${BTCPAY_DOMAIN}/g" /opt/bitcoin/scripts/access-info.sh
     
     # Make scripts executable
     chmod +x /opt/bitcoin/scripts/*.sh
@@ -1123,6 +971,77 @@ start_services() {
 setup_cron_jobs() {
     log_info "Setting up cron jobs..."
     
+    # Create backup script first
+    cat > /opt/bitcoin/scripts/backup.sh <<'SCRIPT_EOF'
+#!/bin/bash
+BACKUP_DIR="/opt/bitcoin/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+LOG_FILE="/opt/bitcoin/logs/backup.log"
+
+# Create directories
+mkdir -p $BACKUP_DIR
+mkdir -p $(dirname $LOG_FILE)
+
+echo "[$(date)] Starting backup..." >> $LOG_FILE
+
+# Backup configurations
+tar -czf $BACKUP_DIR/configs_$DATE.tar.gz \
+    /opt/bitcoin/configs \
+    /opt/bitcoin/docker-compose.yml \
+    /opt/bitcoin/scripts \
+    2>> $LOG_FILE
+
+# Backup BTCPay data if exists
+if [ -d "/opt/bitcoin/btcpay" ]; then
+    cd /opt/bitcoin/btcpay/btcpayserver-docker
+    if [ -f "./btcpay-backup.sh" ]; then
+        ./btcpay-backup.sh $BACKUP_DIR/btcpay_$DATE.tar.gz >> $LOG_FILE 2>&1
+    fi
+fi
+
+# Keep only last 7 days of backups
+find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
+
+echo "[$(date)] Backup completed" >> $LOG_FILE
+echo "Backup completed: $DATE"
+SCRIPT_EOF
+
+    chmod +x /opt/bitcoin/scripts/backup.sh
+    
+    # Create health check script
+    cat > /opt/bitcoin/scripts/health-check.sh <<'SCRIPT_EOF'
+#!/bin/bash
+ALERT_EMAIL="EMAIL_PLACEHOLDER"
+LOG_FILE="/opt/bitcoin/logs/health-check.log"
+
+mkdir -p $(dirname $LOG_FILE)
+
+# Check critical services
+CRITICAL_SERVICES=("bitcoind" "fulcrum" "mempool-api")
+ISSUES=""
+
+for service in "${CRITICAL_SERVICES[@]}"; do
+    if ! docker ps | grep -q $service; then
+        ISSUES="$ISSUES\n- Service $service is not running"
+    fi
+done
+
+# Check disk space
+DISK_USAGE=$(df -h /opt/bitcoin | awk 'NR==2 {print $(NF-1)}' | sed 's/%//')
+if [ $DISK_USAGE -gt 85 ]; then
+    ISSUES="$ISSUES\n- Disk usage critical: ${DISK_USAGE}%"
+fi
+
+# Send alert if issues found
+if [ -n "$ISSUES" ]; then
+    echo -e "Bitcoin Node Alert!\n$ISSUES" | mail -s "Bitcoin Node Issues - $(hostname)" $ALERT_EMAIL
+    echo "[$(date)] Issues found: $ISSUES" >> $LOG_FILE
+fi
+SCRIPT_EOF
+
+    sed -i "s/EMAIL_PLACEHOLDER/${EMAIL}/g" /opt/bitcoin/scripts/health-check.sh
+    chmod +x /opt/bitcoin/scripts/health-check.sh
+    
     # Create crontab entries
     cat > /tmp/bitcoin-cron <<EOF
 # Bitcoin Sovereignty Infrastructure Cron Jobs
@@ -1155,18 +1074,18 @@ setup_family_features() {
     log_info "Setting up family features..."
     
     # Create family status script
-    cat > /opt/bitcoin/scripts/family-status.sh <<'EOF'
+    cat > /opt/bitcoin/scripts/family-status.sh <<'SCRIPT_EOF'
 #!/bin/bash
 clear
-echo "=== ${FAMILY_NAME} Bitcoin Status ==="
+echo "=== FAMILY_NAME_PLACEHOLDER Bitcoin Status ==="
 echo "===================================="
 echo ""
-echo "📊 Bitcoin Price: $(curl -s https://api.coinbase.com/v2/exchange-rates?currency=BTC | jq -r '.data.rates.INR' | xargs printf "₹%'.0f\n")"
+echo "📊 Bitcoin Price: $(curl -s https://api.coinbase.com/v2/exchange-rates?currency=BTC | jq -r '.data.rates.INR' | xargs printf "₹%'.0f\n" 2>/dev/null || echo "Loading...")"
 echo ""
 echo "⚡ Network Status:"
 if docker ps | grep -q bitcoind; then
-    SYNC=$(docker exec bitcoind bitcoin-cli -rpcuser=${BITCOIN_RPC_USER} -rpcpassword=${BITCOIN_RPC_PASS} getblockchaininfo 2>/dev/null | jq -r '.verificationprogress')
-    if [ -n "$SYNC" ]; then
+    SYNC=$(docker exec bitcoind bitcoin-cli -rpcuser=BITCOIN_RPC_USER_PLACEHOLDER -rpcpassword=BITCOIN_RPC_PASS_PLACEHOLDER getblockchaininfo 2>/dev/null | jq -r '.verificationprogress' || echo "0")
+    if [ -n "$SYNC" ] && [ "$SYNC" != "0" ]; then
         SYNC_PCT=$(echo "scale=0; $SYNC * 100 / 1" | bc)
         echo "Sync Progress: ${SYNC_PCT}% ✅"
     fi
@@ -1182,37 +1101,12 @@ if command -v tailscale &> /dev/null && tailscale status &> /dev/null; then
 else
     echo "❌ VPN Not Connected"
 fi
-EOF
+SCRIPT_EOF
 
-    # Create family access script
-    cat > /opt/bitcoin/scripts/family-access.sh <<'EOF'
-#!/bin/bash
-echo "=== ${FAMILY_NAME} Bitcoin Access Guide ==="
-echo "=========================================="
-echo ""
-echo "📱 Mobile Wallet Setup:"
-echo "1. Install Blue Wallet or Electrum"
-echo "2. Create new wallet"
-echo "3. Go to Settings → Network"
-echo "4. Add Electrum Server:"
-echo "   Server: $(tailscale ip -4)"
-echo "   Port: 50001"
-echo "   SSL: Disabled"
-echo ""
-echo "💻 Desktop Access:"
-echo "Blockchain Explorer: http://$(tailscale ip -4):8080"
-echo "Node Dashboard: http://$(tailscale ip -4):3002"
-echo ""
-echo "🛡️ Security Tips:"
-echo "- Never share your wallet seed phrase"
-echo "- Always verify addresses before sending"
-echo "- Keep your Tailscale app connected"
-EOF
-
-    # Fix environment variables
-    sed -i "s/\${FAMILY_NAME}/$FAMILY_NAME/g" /opt/bitcoin/scripts/family-*.sh
-    sed -i "s/\${BITCOIN_RPC_USER}/$BITCOIN_RPC_USER/g" /opt/bitcoin/scripts/family-*.sh
-    sed -i "s/\${BITCOIN_RPC_PASS}/$BITCOIN_RPC_PASS/g" /opt/bitcoin/scripts/family-*.sh
+    # Replace placeholders
+    sed -i "s/FAMILY_NAME_PLACEHOLDER/${FAMILY_NAME}/g" /opt/bitcoin/scripts/family-status.sh
+    sed -i "s/BITCOIN_RPC_USER_PLACEHOLDER/${BITCOIN_RPC_USER}/g" /opt/bitcoin/scripts/family-status.sh
+    sed -i "s/BITCOIN_RPC_PASS_PLACEHOLDER/${BITCOIN_RPC_PASS}/g" /opt/bitcoin/scripts/family-status.sh
     
     chmod +x /opt/bitcoin/scripts/family-*.sh
     chown -R $ADMIN_USER:$ADMIN_USER /opt/bitcoin/scripts
@@ -1269,111 +1163,6 @@ show_post_install() {
 }
 
 # =============================================================================
-# AUTOMATED SERVICE MANAGER
-# =============================================================================
-
-create_service_manager() {
-    log_info "Creating automated service manager..."
-    
-    cat > /opt/bitcoin/scripts/service-manager.sh <<'EOF'
-#!/bin/bash
-# Automated service manager that starts services based on Bitcoin sync progress
-
-LOG_FILE="/opt/bitcoin/logs/service-manager.log"
-mkdir -p $(dirname $LOG_FILE)
-
-check_and_start_services() {
-    cd /opt/bitcoin
-    
-    # Get Bitcoin sync progress
-    if docker ps | grep -q bitcoind; then
-        SYNC_INFO=$(docker exec bitcoind bitcoin-cli -rpcuser=${BITCOIN_RPC_USER} -rpcpassword=${BITCOIN_RPC_PASS} getblockchaininfo 2>/dev/null)
-        if [ $? -eq 0 ]; then
-            PROGRESS=$(echo $SYNC_INFO | jq -r '.verificationprogress')
-            PROGRESS_PCT=$(echo "scale=2; $PROGRESS * 100" | bc)
-            
-            echo "[$(date)] Bitcoin sync progress: ${PROGRESS_PCT}%" >> $LOG_FILE
-            
-            # Start Fulcrum at 50% sync
-            if (( $(echo "$PROGRESS >= 0.5" | bc -l) )) && ! docker ps | grep -q fulcrum; then
-                echo "[$(date)] Starting Fulcrum..." >> $LOG_FILE
-                docker compose up -d fulcrum
-            fi
-            
-            # Start remaining services at 90% sync
-            if (( $(echo "$PROGRESS >= 0.9" | bc -l) )); then
-                if ! docker ps | grep -q mempool-api; then
-                    echo "[$(date)] Starting Mempool services..." >> $LOG_FILE
-                    docker compose up -d mempool-api mempool-web
-                fi
-                
-                if ! docker ps | grep -q btc-explorer; then
-                    echo "[$(date)] Starting BTC Explorer..." >> $LOG_FILE
-                    docker compose up -d btc-rpc-explorer
-                fi
-                
-                # Start BTCPay if configured
-                if [ -f "/opt/bitcoin/btcpay/btcpayserver-docker/btcpay.env" ] && ! docker ps | grep -q btcpayserver; then
-                    echo "[$(date)] Starting BTCPay Server..." >> $LOG_FILE
-                    cd /opt/bitcoin/btcpay/btcpayserver-docker
-                    source btcpay.env
-                    ./btcpay-setup.sh -i
-                fi
-            fi
-        fi
-    fi
-}
-
-# Run the check
-check_and_start_services
-EOF
-
-    chmod +x /opt/bitcoin/scripts/service-manager.sh
-    
-    # Add to cron to run every 5 minutes
-    (crontab -u $ADMIN_USER -l 2>/dev/null; echo "*/5 * * * * /opt/bitcoin/scripts/service-manager.sh") | crontab -u $ADMIN_USER -
-    
-    log_success "Service manager configured"
-}
-
-# =============================================================================
-# CLOUDFLARE TUNNEL SERVICE
-# =============================================================================
-
-setup_cloudflare_service() {
-    log_info "Setting up Cloudflare tunnel service..."
-    
-    if [[ -n "$TUNNEL_ID" ]] && [[ "$TUNNEL_ID" != "YOUR_TUNNEL_ID" ]]; then
-        # Create systemd service
-        cat > /etc/systemd/system/cloudflared.service <<EOF
-[Unit]
-Description=Cloudflare Tunnel
-After=network.target
-
-[Service]
-Type=notify
-TimeoutStartSec=0
-ExecStart=/usr/bin/cloudflared tunnel --config /etc/cloudflared/config.yml run
-Restart=on-failure
-RestartSec=5s
-User=$ADMIN_USER
-Group=$ADMIN_USER
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-        systemctl daemon-reload
-        systemctl enable cloudflared
-        systemctl start cloudflared
-        
-        log_success "Cloudflare tunnel service started"
-    else
-        log_warning "Cloudflare tunnel needs manual configuration"
-    fi
-}
-
-# =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 
@@ -1396,9 +1185,7 @@ main() {
     create_monitoring_scripts
     setup_btcpay
     setup_family_features
-    create_service_manager
     setup_cron_jobs
-    setup_cloudflare_service
     start_services
     
     # Show completion message

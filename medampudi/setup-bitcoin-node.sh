@@ -4,7 +4,7 @@
 # This script loads configuration and runs the main setup
 # =============================================================================
 
-set -euo pipefail
+set -eo pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -126,11 +126,15 @@ export BITCOIN_MAX_CONNECTIONS BITCOIN_DBCACHE BITCOIN_MAXMEMPOOL
 export FAMILY_MEMBERS SKIP_BITCOIN_SYNC ENABLE_TOR ENABLE_I2P
 
 # Check if main setup script exists
-SETUP_SCRIPT="bitcoin-sovereignty-setup.sh"
+SETUP_SCRIPT="bitcoin-sovereignty-setup-fixed.sh"
 if [[ ! -f "$SETUP_SCRIPT" ]]; then
-    echo -e "${RED}Main setup script not found: $SETUP_SCRIPT${NC}"
-    echo "Please ensure all files are present."
-    exit 1
+    # Fall back to original if fixed version doesn't exist
+    SETUP_SCRIPT="bitcoin-sovereignty-setup.sh"
+    if [[ ! -f "$SETUP_SCRIPT" ]]; then
+        echo -e "${RED}Main setup script not found${NC}"
+        echo "Please ensure all files are present."
+        exit 1
+    fi
 fi
 
 # Make sure it's executable
