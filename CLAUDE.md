@@ -36,13 +36,8 @@ This repository contains comprehensive guides for Bitcoin sovereignty infrastruc
 ## Key Configuration Files
 
 ### Primary Setup Guide
-- `rajesh/complete-bitcoin-sovereignty-setup-idea.md` - Main Contabo deployment guide with 11 phases
+- `medampudi/complete-bitcoin-sovereignty-setup-idea.md` - Main ovhCloud deployment guide with all phases
 
-### Generated Configurations (during setup)
-- `docker-compose.yml` - Main orchestration file
-- `configs/fulcrum.conf` - Electrum server configuration
-- `configs/mempool-config.json` - Mempool backend configuration
-- `btcpay.env` - BTCPay Server environment variables
 
 ## Common Development Tasks
 

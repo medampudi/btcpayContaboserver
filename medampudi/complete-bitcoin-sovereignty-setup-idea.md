@@ -25,21 +25,29 @@
 Set these for your family setup:
 ```bash
 # CHANGE THESE VALUES FOR YOUR FAMILY
-DOMAIN_NAME="your-bitcoin-domain.com"
-BTCPAY_DOMAIN="pay.your-bitcoin-domain.com"
-NODE_SUBDOMAIN="node"
-EMAIL="rajesh@your-email.com"
-FAMILY_NAME="Rajesh-Family"
+DOMAIN_NAME="simbotix.com"              # Your main domain
+BTCPAY_DOMAIN="pay.simbotix.com"        # BTCPay subdomain
+EMAIL="medampudi@gmail.com"                      # Your email
+FAMILY_NAME="Medampudi-Family"                     # Family identifier
+
+# Passwords - CHANGE ALL OF THESE TO STRONG PASSWORDS
+BITCOIN_RPC_USER="medampudi_rpc_user"
+BITCOIN_RPC_PASS="SecureMedampudiRPC2025!"
+POSTGRES_PASS="MedampudiPostgres2025!"
+MARIADB_ROOT_PASS="MedampudiMariaRoot2025!"
+MARIADB_MEMPOOL_PASS="MedampudiMempool2025!"
+
+# Server Configuration
+SWAP_SIZE="8G"
+
+# Get these from respective services
+TAILSCALE_AUTHKEY="tskey-auth-kJb6AMjABs11CNTRL-486hP8fFxdK3BxPbfgaYdKG4xUeZTJa4"  # Get from https://login.tailscale.com/admin/settings/keys
+CLOUDFLARE_API_TOKEN="e3Gb-_waN9wUZs9RkZHATDcsVCQVxUEc2kwxNPkh"  # Get from Cloudflare dashboard
+CLOUDFLARE_ZONE_ID="1fa41f58886712000a3a2b279c231394"    # Your domain's zone ID in Cloudflare
 
 # Family Members for Access Management
 FAMILY_MEMBERS="Rajesh Apoorva Meera Vidur Ravi Bhavani Ramya Sumanth Viren Naina"
 
-# Passwords - CHANGE ALL OF THESE - Make them strong!
-BITCOIN_RPC_USER="family_rpc_user"
-BITCOIN_RPC_PASS="YourSecureRPCPassword2025!"
-POSTGRES_PASS="FamilyPostgresPass2025!"
-MARIADB_ROOT_PASS="FamilyMariaDBRoot2025!"
-MARIADB_MEMPOOL_PASS="FamilyMempoolPass2025!"
 
 # India-specific settings
 TIMEZONE="Asia/Kolkata"
