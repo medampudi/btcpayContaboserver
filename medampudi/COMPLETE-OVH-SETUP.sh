@@ -111,8 +111,20 @@ if ! command -v docker &> /dev/null; then
     sudo usermod -aG docker $USER
     rm get-docker.sh
     print_status "Docker installed"
+    print_warning "Docker group added. You may need to log out and back in for docker commands to work without sudo."
+    print_warning "Continuing with sudo docker for now..."
 else
     print_warning "Docker already installed"
+fi
+
+# Check if user can run docker without sudo, if not use sudo
+if ! docker info &> /dev/null; then
+    print_warning "Using sudo for docker commands..."
+    DOCKER_CMD="sudo docker"
+    DOCKER_COMPOSE_CMD="sudo docker compose"
+else
+    DOCKER_CMD="docker"
+    DOCKER_COMPOSE_CMD="docker compose"
 fi
 
 if ! command -v docker compose &> /dev/null; then
@@ -276,7 +288,7 @@ EOF
 # Phase 7: Docker Compose Setup
 print_status "Creating Docker Compose configuration..."
 
-cat > docker-compose.yml << 'EOF'
+cat > docker-compose.yml << EOF
 # Medampudi Family Bitcoin Infrastructure
 # Complete Stack on OVH Server
 
@@ -352,7 +364,7 @@ services:
     environment:
       POSTGRES_DB: btcpay
       POSTGRES_USER: btcpay
-      POSTGRES_PASSWORD: ${POSTGRES_PASS}
+      POSTGRES_PASSWORD: $POSTGRES_PASS
 
   # Mempool Database
   mempool-db:
@@ -367,8 +379,8 @@ services:
     environment:
       MYSQL_DATABASE: mempool
       MYSQL_USER: mempool
-      MYSQL_PASSWORD: ${MARIADB_MEMPOOL_PASS}
-      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASS}
+      MYSQL_PASSWORD: $MARIADB_MEMPOOL_PASS
+      MYSQL_ROOT_PASSWORD: $MARIADB_ROOT_PASS
     command: --default-authentication-plugin=mysql_native_password
 
   # Mempool API
@@ -392,13 +404,13 @@ services:
       ELECTRUM_TLS_ENABLED: "false"
       CORE_RPC_HOST: "bitcoind"
       CORE_RPC_PORT: "8332"
-      CORE_RPC_USERNAME: "${BITCOIN_RPC_USER}"
-      CORE_RPC_PASSWORD: "${BITCOIN_RPC_PASS}"
+      CORE_RPC_USERNAME: "$BITCOIN_RPC_USER"
+      CORE_RPC_PASSWORD: "$BITCOIN_RPC_PASS"
       DATABASE_ENABLED: "true"
       DATABASE_HOST: "mempool-db"
       DATABASE_DATABASE: "mempool"
       DATABASE_USERNAME: "mempool"
-      DATABASE_PASSWORD: "${MARIADB_MEMPOOL_PASS}"
+      DATABASE_PASSWORD: "$MARIADB_MEMPOOL_PASS"
 
   # Mempool Frontend
   mempool-web:
@@ -432,8 +444,8 @@ services:
       BTCEXP_PORT: 3002
       BTCEXP_BITCOIND_HOST: bitcoind
       BTCEXP_BITCOIND_PORT: 8332
-      BTCEXP_BITCOIND_USER: ${BITCOIN_RPC_USER}
-      BTCEXP_BITCOIND_PASS: ${BITCOIN_RPC_PASS}
+      BTCEXP_BITCOIND_USER: $BITCOIN_RPC_USER
+      BTCEXP_BITCOIND_PASS: $BITCOIN_RPC_PASS
       BTCEXP_ELECTRUM_SERVERS: tcp://fulcrum:50001
       BTCEXP_SLOW_DEVICE_MODE: false
       BTCEXP_NO_INMEMORY_RPC_CACHE: false
@@ -456,18 +468,18 @@ services:
       - btcpay_data:/datadir
       - ./btcpay.env:/.env
     environment:
-      BTCPAY_HOST: ${BTCPAY_DOMAIN}
+      BTCPAY_HOST: $BTCPAY_DOMAIN
       BTCPAY_ROOTPATH: /
       BTCPAY_PROTOCOL: https
       BTCPAY_PORT: 443
       BTCPAY_CHAINS: btc
       BTCPAY_BTCEXPLORERURL: http://btc-explorer:3002
       BTCPAY_BTCEXPLORERCOOKIEFILE: /datadir/cookie
-      BTCPAY_POSTGRES: User ID=btcpay;Password=${POSTGRES_PASS};Host=postgres;Port=5432;Database=btcpay;
+      BTCPAY_POSTGRES: User ID=btcpay;Password=$POSTGRES_PASS;Host=postgres;Port=5432;Database=btcpay;
       BTCPAY_DEBUGLOG: btcpay.log
       BTCPAY_NETWORK: mainnet
       BTCPAY_BIND: 0.0.0.0:49392
-      BTCPAY_EXTERNALURL: https://${BTCPAY_DOMAIN}
+      BTCPAY_EXTERNALURL: https://$BTCPAY_DOMAIN
       BTCPAY_SOCKSENDPOINT: tor:9050
     ports:
       - "127.0.0.1:49392:49392"  # Only on localhost
@@ -499,7 +511,7 @@ cat >> docker-compose.yml << EOF
         bitcoin-rpcpassword=$BITCOIN_RPC_PASS
         alias=$FAMILY_NAME-Lightning
         log-level=info
-        wallet=sqlite3:///root/.lightning/lightningd.sqlite3
+        wallet=sqlite3:///root/.lightning/bitcoin/lightningd.sqlite3
     ports:
       - "9735:9735"  # Lightning P2P
 
@@ -514,9 +526,11 @@ cat >> docker-compose.yml << EOF
       bitcoin:
         ipv4_address: 172.25.0.71
     volumes:
-      - ./configs/thunderhub.yml:/app/config.yml
+      - ./configs/thunderhub.yml:/app/thub_config.yaml
+      - lightning_data:/root/.lightning
     environment:
-      ACCOUNT_CONFIG_PATH: /app/config.yml
+      ACCOUNT_CONFIG_PATH: /app/thub_config.yaml
+      COOKIE_PATH: /app/.cookie
     ports:
       - "127.0.0.1:3000:3000"  # Only on localhost
 EOF
@@ -526,10 +540,12 @@ cat > configs/thunderhub.yml << EOF
 masterPassword: 'thunderhub'
 accounts:
   - name: '$FAMILY_NAME Lightning'
-    serverUrl: 'lightningd:9735'
-    lndDir: '/root/.lightning'
+    serverUrl: 'lightningd'
     network: 'mainnet'
-    type: 'clightning'
+    implementation: 'CLN'
+    macaroonPath: ''
+    certificatePath: ''
+    socket: '/root/.lightning/lightning-rpc'
 EOF
 
 # Phase 8: Create Management Scripts
@@ -548,12 +564,12 @@ echo ""
 
 # Check Docker services
 echo "🐳 Docker Services:"
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAME|bitcoind|fulcrum|mempool|btc-explorer|btcpay|lightning|thunderhub|postgres"
+$DOCKER_CMD ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep -E "NAME|bitcoind|fulcrum|mempool|btc-explorer|btcpay|lightning|thunderhub|postgres"
 
 echo ""
 echo "📊 Bitcoin Sync Status:"
-if docker ps | grep -q bitcoind; then
-    docker exec bitcoind bitcoin-cli -conf=/data/bitcoin.conf getblockchaininfo | jq '{blocks, headers, verificationprogress, size_on_disk}'
+if $DOCKER_CMD ps | grep -q bitcoind; then
+    $DOCKER_CMD exec bitcoind bitcoin-cli getblockchaininfo | jq '{blocks, headers, verificationprogress, size_on_disk}'
 else
     echo "❌ Bitcoin Core not running"
 fi
@@ -601,7 +617,7 @@ echo "💳 BTCPay Server (Public):"
 echo "https://$BTCPAY_DOMAIN"
 echo ""
 echo "⚡ Lightning Node:"
-echo "Node ID: $(docker exec lightningd lightning-cli getinfo 2>/dev/null | jq -r .id || echo 'Not ready')"
+echo "Node ID: $($DOCKER_CMD exec lightningd lightning-cli getinfo 2>/dev/null | jq -r .id || echo 'Not ready')"
 EOF
 
 chmod +x scripts/access-info.sh
@@ -620,19 +636,23 @@ echo "🔒 Backing up critical data..."
 cp -r /opt/bitcoin/configs "$BACKUP_DIR/"
 
 # Backup wallet if exists
-if docker exec bitcoind test -d /data/wallet; then
-    docker exec bitcoind tar -czf - -C /data wallet | cat > "$BACKUP_DIR/bitcoin-wallet.tar.gz"
+if $DOCKER_CMD exec bitcoind test -d /data/wallet 2>/dev/null; then
+    $DOCKER_CMD exec bitcoind tar -czf - -C /data wallet | cat > "$BACKUP_DIR/bitcoin-wallet.tar.gz"
     echo "✅ Bitcoin wallet backed up"
 fi
 
 # Backup Lightning
-if docker exec lightningd test -d /root/.lightning; then
-    docker exec lightningd tar -czf - -C /root/.lightning hsm_secret | cat > "$BACKUP_DIR/lightning-hsm.tar.gz"
+if $DOCKER_CMD exec lightningd test -d /root/.lightning 2>/dev/null; then
+    $DOCKER_CMD exec lightningd tar -czf - -C /root/.lightning hsm_secret | cat > "$BACKUP_DIR/lightning-hsm.tar.gz" 2>/dev/null
     echo "✅ Lightning keys backed up"
 fi
 
 # Backup BTCPay
-docker exec postgres pg_dump -U btcpay btcpay | gzip > "$BACKUP_DIR/btcpay-db.sql.gz"
+if $DOCKER_CMD exec postgres pg_dump -U btcpay btcpay 2>/dev/null | gzip > "$BACKUP_DIR/btcpay-db.sql.gz"; then
+    echo "✅ BTCPay database backed up"
+else
+    echo "⚠️ BTCPay backup failed - database may not be ready"
+fi
 echo "✅ BTCPay database backed up"
 
 echo ""
@@ -678,7 +698,12 @@ export BTCPAY_DOMAIN
 export FAMILY_NAME
 
 # Start services
-docker compose up -d
+print_status "Starting all Bitcoin services..."
+if ! $DOCKER_COMPOSE_CMD up -d; then
+    print_error "Failed to start services. Check the logs:"
+    $DOCKER_CMD ps -a
+    exit 1
+fi
 
 print_status "Waiting for services to initialize..."
 sleep 30
@@ -688,7 +713,12 @@ echo -e "${BLUE}🔧 Phase 11: Post-Setup Configuration${NC}"
 
 # Generate SSL certificate for Fulcrum
 print_status "Generating SSL certificate for Fulcrum..."
-docker exec fulcrum sh -c "cd /data && openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes -keyout fulcrum.key -out fulcrum.crt -subj '/CN=fulcrum'"
+if $DOCKER_CMD ps | grep -q fulcrum; then
+    $DOCKER_CMD exec fulcrum sh -c "cd /data && openssl req -x509 -newkey rsa:4096 -sha256 -days 3650 -nodes -keyout fulcrum.key -out fulcrum.crt -subj '/CN=fulcrum'"
+    print_status "SSL certificate generated for Fulcrum"
+else
+    print_warning "Fulcrum not running, skipping SSL cert generation"
+fi
 
 # Create cron jobs
 print_status "Setting up automatic backups..."
@@ -706,7 +736,7 @@ echo ""
 echo -e "${YELLOW}📋 What's Next:${NC}"
 echo ""
 echo "1. ⏳ Wait for Bitcoin to sync (2-3 days for full sync)"
-echo "   Check progress: docker exec bitcoind bitcoin-cli -conf=/data/bitcoin.conf getblockchaininfo"
+echo "   Check progress: docker exec bitcoind bitcoin-cli getblockchaininfo"
 echo ""
 echo "2. 🔗 Connect Tailscale if not done:"
 echo "   sudo tailscale up"
@@ -729,6 +759,19 @@ echo "Savings:     \$20/month (\$240/year!)"
 echo ""
 echo -e "${GREEN}🏠 Your family Bitcoin infrastructure is ready!${NC}"
 echo ""
+
+# Make scripts executable
+chmod +x scripts/*.sh
+
+# Final validation
+print_status "Performing final validation..."
+sleep 10
+
+if $DOCKER_CMD ps | grep -c 'bitcoind\|fulcrum\|mempool\|btcpay' | grep -q '[4-9]'; then
+    print_status "Core services are running!"
+else
+    print_warning "Some services may not be running. Check with: $DOCKER_CMD ps"
+fi
 
 # Show initial status
 ./scripts/status.sh
