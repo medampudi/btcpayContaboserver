@@ -17,13 +17,19 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 
-# Load configuration
+# Load configuration from setup-config.env if exists
+if [[ -f "setup-config.env" ]]; then
+    source setup-config.env
+fi
+
+# Set defaults from actual setup
 BITCOIN_RPC_USER="${BITCOIN_RPC_USER:-bitcoin_rpc_user}"
-BITCOIN_RPC_PASS="${BITCOIN_RPC_PASS:-SecurePassword}"
-POSTGRES_PASS="${POSTGRES_PASS:-PostgresPass}"
-MARIADB_ROOT_PASS="${MARIADB_ROOT_PASS:-MariaRootPass}"
-MARIADB_MEMPOOL_PASS="${MARIADB_MEMPOOL_PASS:-MempoolPass}"
+BITCOIN_RPC_PASS="${BITCOIN_RPC_PASS:-KsVsyjn1Mfu9FA0H}"
+POSTGRES_PASS="${POSTGRES_PASS:-YEqgtzxGJeBo392o}"
+MARIADB_ROOT_PASS="${MARIADB_ROOT_PASS:-pvq7OVSN1DWrJ1ti}"
+MARIADB_MEMPOOL_PASS="${MARIADB_MEMPOOL_PASS:-LRUsrD6nWzJzRpT6}"
 BTCPAY_DOMAIN="${BTCPAY_DOMAIN:-pay.simbotix.com}"
+ADMIN_USER="${ADMIN_USER:-rajesh}"
 TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "127.0.0.1")
 
 # Check if root
