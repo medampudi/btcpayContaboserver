@@ -77,9 +77,9 @@ git clone https://github.com/yourusername/btcpayserver-setup.git
 cd btcpayserver-setup/medampudi
 
 # Or download directly:
-wget https://raw.githubusercontent.com/yourusername/btcpayserver-setup/main/medampudi/setup-config.env
-wget https://raw.githubusercontent.com/yourusername/btcpayserver-setup/main/medampudi/setup-bitcoin-node.sh
-wget https://raw.githubusercontent.com/yourusername/btcpayserver-setup/main/medampudi/bitcoin-sovereignty-setup.sh
+wget https://raw.githubusercontent.com/medampudi/btcpayContaboserver/refs/heads/main/medampudi/setup-config.env
+wget https://raw.githubusercontent.com/medampudi/btcpayContaboserver/refs/heads/main/medampudi/setup-bitcoin-node.sh
+wget https://raw.githubusercontent.com/medampudi/btcpayContaboserver/refs/heads/main/medampudi/bitcoin-sovereignty-setup.sh
 
 # Make scripts executable
 chmod +x *.sh
