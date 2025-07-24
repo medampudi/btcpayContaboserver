@@ -34,7 +34,7 @@ SWAP_SIZE="8G"
 # Get these from respective services
 TAILSCALE_AUTHKEY="tskey-auth-kJb6AMjABs11CNTRL-486hP8fFxdK3BxPbfgaYdKG4xUeZTJa4"  # Get from https://login.tailscale.com/admin/settings/keys
 CLOUDFLARE_API_TOKEN="e3Gb-_waN9wUZs9RkZHATDcsVCQVxUEc2kwxNPkh"  # Get from Cloudflare dashboard
-CLOUDFLARE_ZONE_ID=""    # Your domain's zone ID in Cloudflare
+CLOUDFLARE_ZONE_ID="1fa41f58886712000a3a2b279c231394"    # Your domain's zone ID in Cloudflare
 
 # ============================================
 # DO NOT MODIFY BELOW THIS LINE
