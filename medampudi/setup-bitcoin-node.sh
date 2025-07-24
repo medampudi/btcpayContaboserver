@@ -126,11 +126,14 @@ export BITCOIN_MAX_CONNECTIONS BITCOIN_DBCACHE BITCOIN_MAXMEMPOOL
 export FAMILY_MEMBERS SKIP_BITCOIN_SYNC ENABLE_TOR ENABLE_I2P
 
 # Check if main setup script exists
-SETUP_SCRIPT="bitcoin-sovereignty-setup-fixed.sh"
+SETUP_SCRIPT="bitcoin-setup-simple.sh"
 if [[ ! -f "$SETUP_SCRIPT" ]]; then
-    # Fall back to original if fixed version doesn't exist
-    SETUP_SCRIPT="bitcoin-sovereignty-setup.sh"
-    if [[ ! -f "$SETUP_SCRIPT" ]]; then
+    # Try other versions
+    if [[ -f "bitcoin-sovereignty-setup-fixed.sh" ]]; then
+        SETUP_SCRIPT="bitcoin-sovereignty-setup-fixed.sh"
+    elif [[ -f "bitcoin-sovereignty-setup.sh" ]]; then
+        SETUP_SCRIPT="bitcoin-sovereignty-setup.sh"
+    else
         echo -e "${RED}Main setup script not found${NC}"
         echo "Please ensure all files are present."
         exit 1
