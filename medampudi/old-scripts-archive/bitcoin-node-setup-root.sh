@@ -2,14 +2,11 @@
 set -eo pipefail
 
 # =============================================================================
-# Bitcoin Node Setup Script for Ubuntu 22.04 - Standard User Version
-# Version: 4.0 - Security Best Practices
-# =============================================================================
-# This script is designed to run as the standard 'ubuntu' user with sudo
-# No need for 'sudo su -' or running everything as root
+# Bitcoin Node Complete Setup Script for Ubuntu 22.04
+# Version: 3.0 - Production Ready
 # =============================================================================
 
-VERSION="4.0"
+VERSION="3.0"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Color codes
@@ -69,22 +66,10 @@ check_config() {
 validate_system() {
     log_section "System Validation"
     
-    # Check if we're running as ubuntu user
-    if [[ "$USER" != "ubuntu" ]]; then
-        log_warning "This script is designed to run as the 'ubuntu' user"
-        log_info "Current user: $USER"
-        read -p "Continue anyway? (y/N): " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
-    fi
-    
-    # Check if we have sudo access
-    if ! sudo -n true 2>/dev/null; then
-        log_error "This script requires passwordless sudo access"
-        log_info "Run: sudo visudo"
-        log_info "Add: ubuntu ALL=(ALL) NOPASSWD:ALL"
+    # Check if root
+    if [[ $EUID -ne 0 ]]; then
+        log_error "This script must be run as root"
+        log_info "Run: sudo su - (or login as root)"
         exit 1
     fi
     
@@ -113,24 +98,23 @@ validate_system() {
 }
 
 # =============================================================================
-# INITIAL SETUP (runs with sudo as needed)
+# INITIAL SETUP
 # =============================================================================
 
 initial_setup() {
     log_section "Initial System Setup"
     
     # Set hostname and timezone
-    sudo hostnamectl set-hostname $SERVER_HOSTNAME
-    sudo timedatectl set-timezone $TIMEZONE
+    hostnamectl set-hostname $SERVER_HOSTNAME
+    timedatectl set-timezone $TIMEZONE
     
     # Update system
     log_info "Updating system packages..."
-    sudo apt update
-    sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y
+    apt update && DEBIAN_FRONTEND=noninteractive apt upgrade -y
     
     # Install essential packages
     log_info "Installing essential packages..."
-    sudo DEBIAN_FRONTEND=noninteractive apt install -y \
+    DEBIAN_FRONTEND=noninteractive apt install -y \
         curl wget git vim htop ncdu tree \
         ufw fail2ban net-tools dnsutils \
         software-properties-common apt-transport-https \
@@ -140,16 +124,48 @@ initial_setup() {
     # Configure swap if needed
     if [[ ! -f /swapfile ]]; then
         log_info "Creating ${SWAP_SIZE} swap file..."
-        sudo fallocate -l $SWAP_SIZE /swapfile
-        sudo chmod 600 /swapfile
-        sudo mkswap /swapfile
-        sudo swapon /swapfile
-        echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
-        echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf
-        sudo sysctl -p
+        fallocate -l $SWAP_SIZE /swapfile
+        chmod 600 /swapfile
+        mkswap /swapfile
+        swapon /swapfile
+        echo '/swapfile none swap sw 0 0' >> /etc/fstab
+        echo "vm.swappiness=10" >> /etc/sysctl.conf
+        sysctl -p
     fi
     
     log_success "Initial setup complete"
+}
+
+# =============================================================================
+# USER SETUP
+# =============================================================================
+
+setup_user() {
+    log_section "User Configuration"
+    
+    # Handle admin user
+    if ! id "$ADMIN_USER" &>/dev/null; then
+        log_info "Creating admin user: $ADMIN_USER"
+        useradd -m -s /bin/bash $ADMIN_USER
+        usermod -aG sudo $ADMIN_USER
+    else
+        log_info "User $ADMIN_USER already exists"
+    fi
+    
+    # Ensure SSH directory
+    USER_HOME="/home/$ADMIN_USER"
+    if [[ ! -d "$USER_HOME/.ssh" ]]; then
+        mkdir -p "$USER_HOME/.ssh"
+        chmod 700 "$USER_HOME/.ssh"
+        touch "$USER_HOME/.ssh/authorized_keys"
+        chmod 600 "$USER_HOME/.ssh/authorized_keys"
+    fi
+    
+    # Fix ownership
+    USER_GROUP=$(id -gn $ADMIN_USER)
+    chown -R $ADMIN_USER:$USER_GROUP "$USER_HOME/.ssh"
+    
+    log_success "User configuration complete"
 }
 
 # =============================================================================
@@ -159,27 +175,8 @@ initial_setup() {
 setup_security() {
     log_section "Security Configuration"
     
-    # Configure SSH
-    log_info "Hardening SSH configuration..."
-    sudo cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup
-    
-    # Apply secure SSH settings
-    sudo tee /etc/ssh/sshd_config.d/99-bitcoin-node.conf > /dev/null << EOF
-# Bitcoin Node Security Settings
-PermitRootLogin no
-PasswordAuthentication no
-PubkeyAuthentication yes
-ChallengeResponseAuthentication no
-UsePAM yes
-X11Forwarding no
-PrintMotd no
-AcceptEnv LANG LC_*
-ClientAliveInterval 300
-ClientAliveCountMax 2
-EOF
-
     # Configure fail2ban
-    sudo tee /etc/fail2ban/jail.local > /dev/null << EOF
+    cat > /etc/fail2ban/jail.local << EOF
 [DEFAULT]
 bantime = 3600
 findtime = 600
@@ -191,26 +188,25 @@ port = $SSH_PORT
 maxretry = 3
 EOF
     
-    sudo systemctl restart fail2ban
-    sudo systemctl restart sshd
+    systemctl restart fail2ban
     
     # Configure firewall
     log_info "Setting up firewall..."
-    sudo ufw --force reset
-    sudo ufw default deny incoming
-    sudo ufw default allow outgoing
+    ufw --force reset
+    ufw default deny incoming
+    ufw default allow outgoing
     
     # Essential ports
-    sudo ufw allow $SSH_PORT/tcp comment 'SSH'
-    sudo ufw allow 80/tcp comment 'HTTP'
-    sudo ufw allow 443/tcp comment 'HTTPS'
-    sudo ufw allow 8333/tcp comment 'Bitcoin'
-    sudo ufw allow 9735/tcp comment 'Lightning'
+    ufw allow $SSH_PORT/tcp comment 'SSH'
+    ufw allow 80/tcp comment 'HTTP'
+    ufw allow 443/tcp comment 'HTTPS'
+    ufw allow 8333/tcp comment 'Bitcoin'
+    ufw allow 9735/tcp comment 'Lightning'
     
-    # Allow Tailscale when installed
-    sudo ufw allow in on tailscale0 || true
+    # Allow Tailscale
+    ufw allow in on tailscale0
     
-    echo "y" | sudo ufw enable
+    echo "y" | ufw enable
     
     log_success "Security configured"
 }
@@ -231,18 +227,17 @@ setup_tailscale() {
     # Connect if auth key provided
     if [[ -n "$TAILSCALE_AUTHKEY" ]]; then
         log_info "Connecting Tailscale..."
-        sudo tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh --accept-routes || true
+        tailscale up --authkey="$TAILSCALE_AUTHKEY" --ssh --accept-routes || true
         sleep 5
         
         TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "")
         if [[ -n "$TAILSCALE_IP" ]]; then
             log_success "Tailscale connected: $TAILSCALE_IP"
-            mkdir -p ~/.bitcoin
-            echo "$TAILSCALE_IP" > ~/.bitcoin/.tailscale_ip
+            echo "$TAILSCALE_IP" > /opt/bitcoin/.tailscale_ip
         fi
     else
         log_warning "No Tailscale auth key provided"
-        log_info "Run manually: sudo tailscale up"
+        log_info "Run manually: tailscale up"
     fi
 }
 
@@ -256,19 +251,18 @@ setup_docker() {
     if ! command -v docker &>/dev/null; then
         log_info "Installing Docker..."
         curl -fsSL https://get.docker.com | sh
-        
-        # Add current user to docker group
-        sudo usermod -aG docker $USER
-        log_warning "You'll need to log out and back in for docker group membership to take effect"
     fi
+    
+    # Add user to docker group
+    usermod -aG docker $ADMIN_USER || true
     
     # Install docker-compose
     if ! docker compose version &>/dev/null 2>&1; then
-        sudo apt install -y docker-compose-v2
+        apt install -y docker-compose-v2
     fi
     
-    sudo systemctl start docker
-    sudo systemctl enable docker
+    systemctl start docker
+    systemctl enable docker
     
     log_success "Docker ready"
 }
@@ -280,13 +274,11 @@ setup_docker() {
 setup_bitcoin() {
     log_section "Bitcoin Stack Setup"
     
-    # Create directory structure in user's home
-    BITCOIN_DIR="$HOME/bitcoin-node"
-    log_info "Creating Bitcoin directory at $BITCOIN_DIR"
-    
-    mkdir -p $BITCOIN_DIR/{data,configs,scripts,backups,logs}
-    mkdir -p $BITCOIN_DIR/data/{bitcoin,fulcrum,lightning,btcpay}
-    mkdir -p $BITCOIN_DIR/mysql
+    # Create directory structure
+    log_info "Creating directories..."
+    mkdir -p /opt/bitcoin/{data,configs,scripts,backups,logs}
+    mkdir -p /opt/bitcoin/data/{bitcoin,fulcrum,lightning,btcpay}
+    mkdir -p /opt/bitcoin/mysql
     
     # Create configurations
     create_configs
@@ -297,16 +289,16 @@ setup_bitcoin() {
     # Create scripts
     create_scripts
     
-    # Create systemd service for better management
-    create_systemd_service
+    # Fix ownership
+    USER_GROUP=$(id -gn $ADMIN_USER 2>/dev/null || echo $ADMIN_USER)
+    chown -R $ADMIN_USER:$USER_GROUP /opt/bitcoin
     
     # Start Bitcoin Core
     log_info "Starting Bitcoin Core..."
-    cd $BITCOIN_DIR
+    cd /opt/bitcoin
     docker compose up -d bitcoind
     
     log_success "Bitcoin Core started - will take 2-5 days to sync"
-    log_info "Monitor with: ~/bitcoin-node/scripts/check-sync.sh"
 }
 
 # =============================================================================
@@ -315,7 +307,7 @@ setup_bitcoin() {
 
 create_configs() {
     # Fulcrum config
-    cat > $BITCOIN_DIR/configs/fulcrum.conf << EOF
+    cat > /opt/bitcoin/configs/fulcrum.conf << EOF
 datadir = /data
 bitcoind = bitcoind:8332
 rpcuser = ${BITCOIN_RPC_USER}
@@ -331,7 +323,7 @@ db_mem = 4000.0
 EOF
 
     # Mempool config
-    cat > $BITCOIN_DIR/configs/mempool-config.json << EOF
+    cat > /opt/bitcoin/configs/mempool-config.json << EOF
 {
   "MEMPOOL": {
     "NETWORK": "mainnet",
@@ -365,9 +357,9 @@ EOF
 
 create_docker_compose() {
     # Get Tailscale IP if available
-    TAILSCALE_IP=$(cat ~/.bitcoin/.tailscale_ip 2>/dev/null || echo "127.0.0.1")
+    TAILSCALE_IP=$(tailscale ip -4 2>/dev/null || echo "127.0.0.1")
     
-    cat > $BITCOIN_DIR/docker-compose.yml << 'EOF'
+    cat > /opt/bitcoin/docker-compose.yml << EOF
 version: '3.8'
 
 networks:
@@ -379,7 +371,17 @@ networks:
 
 volumes:
   bitcoin_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/bitcoin/data/bitcoin
   fulcrum_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/bitcoin/data/fulcrum
   postgres_data:
   mempool_data:
 
@@ -412,7 +414,6 @@ services:
       - "8333:8333"
       - "${TAILSCALE_IP}:8332:8332"
 
-  # Additional services use 'profiles' to start later
   fulcrum:
     image: cculianu/fulcrum:latest
     container_name: fulcrum
@@ -430,20 +431,118 @@ services:
       - "${TAILSCALE_IP}:50002:50002"
     profiles:
       - full
-EOF
 
-    # Substitute environment variables
-    sed -i "s/\${BITCOIN_RPC_USER}/$BITCOIN_RPC_USER/g" $BITCOIN_DIR/docker-compose.yml
-    sed -i "s/\${BITCOIN_RPC_PASS}/$BITCOIN_RPC_PASS/g" $BITCOIN_DIR/docker-compose.yml
-    sed -i "s/\${BITCOIN_DBCACHE}/$BITCOIN_DBCACHE/g" $BITCOIN_DIR/docker-compose.yml
-    sed -i "s/\${BITCOIN_MAXMEMPOOL}/$BITCOIN_MAXMEMPOOL/g" $BITCOIN_DIR/docker-compose.yml
-    sed -i "s/\${BITCOIN_MAX_CONNECTIONS}/$BITCOIN_MAX_CONNECTIONS/g" $BITCOIN_DIR/docker-compose.yml
-    sed -i "s/\${TAILSCALE_IP}/$TAILSCALE_IP/g" $BITCOIN_DIR/docker-compose.yml
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres
+    restart: unless-stopped
+    networks:
+      bitcoin:
+        ipv4_address: 172.25.0.30
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: btcpay
+      POSTGRES_USER: btcpay
+      POSTGRES_PASSWORD: ${POSTGRES_PASS}
+    profiles:
+      - full
+
+  mempool-db:
+    image: mariadb:10.11
+    container_name: mempool-db
+    restart: unless-stopped
+    networks:
+      bitcoin:
+        ipv4_address: 172.25.0.40
+    volumes:
+      - ./mysql:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: mempool
+      MYSQL_USER: mempool
+      MYSQL_PASSWORD: ${MARIADB_MEMPOOL_PASS}
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASS}
+    profiles:
+      - full
+
+  mempool-api:
+    image: mempool/backend:latest
+    container_name: mempool-api
+    restart: unless-stopped
+    depends_on:
+      - bitcoind
+      - fulcrum
+      - mempool-db
+    networks:
+      bitcoin:
+        ipv4_address: 172.25.0.41
+    volumes:
+      - ./configs/mempool-config.json:/backend/mempool-config.json:ro
+      - mempool_data:/backend/cache
+    environment:
+      MEMPOOL_NETWORK: mainnet
+      MEMPOOL_BACKEND: electrum
+      ELECTRUM_HOST: fulcrum
+      ELECTRUM_PORT: 50001
+      ELECTRUM_TLS_ENABLED: "false"
+      CORE_RPC_HOST: bitcoind
+      CORE_RPC_PORT: 8332
+      CORE_RPC_USERNAME: ${BITCOIN_RPC_USER}
+      CORE_RPC_PASSWORD: ${BITCOIN_RPC_PASS}
+      DATABASE_ENABLED: "true"
+      DATABASE_HOST: mempool-db
+      DATABASE_DATABASE: mempool
+      DATABASE_USERNAME: mempool
+      DATABASE_PASSWORD: ${MARIADB_MEMPOOL_PASS}
+    profiles:
+      - full
+
+  mempool-web:
+    image: mempool/frontend:latest
+    container_name: mempool-web
+    restart: unless-stopped
+    depends_on:
+      - mempool-api
+    networks:
+      bitcoin:
+        ipv4_address: 172.25.0.42
+    ports:
+      - "${TAILSCALE_IP}:8080:8080"
+    environment:
+      FRONTEND_HTTP_PORT: "8080"
+      BACKEND_MAINNET_HTTP_HOST: mempool-api
+      BACKEND_MAINNET_HTTP_PORT: 8999
+    profiles:
+      - full
+
+  btc-rpc-explorer:
+    image: btcpayserver/btc-rpc-explorer:latest
+    container_name: btc-explorer
+    restart: unless-stopped
+    depends_on:
+      - bitcoind
+      - fulcrum
+    networks:
+      bitcoin:
+        ipv4_address: 172.25.0.50
+    ports:
+      - "${TAILSCALE_IP}:3002:3002"
+    environment:
+      BTCEXP_HOST: 0.0.0.0
+      BTCEXP_PORT: 3002
+      BTCEXP_BITCOIND_HOST: bitcoind
+      BTCEXP_BITCOIND_PORT: 8332
+      BTCEXP_BITCOIND_USER: ${BITCOIN_RPC_USER}
+      BTCEXP_BITCOIND_PASS: ${BITCOIN_RPC_PASS}
+      BTCEXP_ELECTRUM_SERVERS: tcp://fulcrum:50001
+    profiles:
+      - full
+EOF
 }
 
 create_scripts() {
     # Check sync script
-    cat > $BITCOIN_DIR/scripts/check-sync.sh << 'EOF'
+    cat > /opt/bitcoin/scripts/check-sync.sh << 'EOF'
 #!/bin/bash
 # Check Bitcoin sync status
 
@@ -452,24 +551,18 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-# Get config location
-CONFIG_FILE="$HOME/bitcoin-node/setup-config.env"
+# Load config
+CONFIG_FILE="/root/setup-config.env"
 if [[ -f "$CONFIG_FILE" ]]; then
     source "$CONFIG_FILE"
 else
-    CONFIG_FILE="$(dirname $0)/../setup-config.env"
-    if [[ -f "$CONFIG_FILE" ]]; then
-        source "$CONFIG_FILE"
-    else
-        echo "Config file not found!"
-        exit 1
-    fi
+    echo "Config file not found!"
+    exit 1
 fi
 
 # Check if running
 if ! docker ps | grep -q bitcoind; then
     echo "Bitcoin Core is not running!"
-    echo "Start with: cd ~/bitcoin-node && docker compose up -d bitcoind"
     exit 1
 fi
 
@@ -494,29 +587,29 @@ echo "Blocks: $BLOCKS / $HEADERS"
 
 if (( $(echo "$PROGRESS >= 0.9" | bc -l) )); then
     echo -e "\n${GREEN}✓ Bitcoin is synced enough!${NC}"
-    echo "Run: ~/bitcoin-node/scripts/enable-all-services.sh"
+    echo "Run: ./enable-all-services.sh"
 else
     echo -e "\n⏳ Still syncing... Check again later."
 fi
 EOF
 
     # Enable all services script
-    cat > $BITCOIN_DIR/scripts/enable-all-services.sh << 'EOF'
+    cat > /opt/bitcoin/scripts/enable-all-services.sh << 'EOF'
 #!/bin/bash
 # Enable all services after Bitcoin sync
 
-cd ~/bitcoin-node
+cd /opt/bitcoin
 
 echo "Starting all services..."
 docker compose --profile full up -d
 
 echo ""
 echo "All services starting! Wait a few minutes then check:"
-echo "~/bitcoin-node/scripts/status.sh"
+echo "./status.sh"
 EOF
 
     # Status script
-    cat > $BITCOIN_DIR/scripts/status.sh << 'EOF'
+    cat > /opt/bitcoin/scripts/status.sh << 'EOF'
 #!/bin/bash
 # Show system status
 
@@ -525,45 +618,17 @@ echo "=== Bitcoin Node Status ==="
 echo "=========================="
 echo ""
 echo "System: $(hostname)"
-if [[ -f ~/.bitcoin/.tailscale_ip ]]; then
-    echo "Tailscale IP: $(cat ~/.bitcoin/.tailscale_ip)"
+if [[ -f /opt/bitcoin/.tailscale_ip ]]; then
+    echo "Tailscale IP: $(cat /opt/bitcoin/.tailscale_ip)"
 fi
 echo ""
 echo "Services:"
-cd ~/bitcoin-node
 docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "NAME|bitcoin|fulcrum|mempool|explorer|postgres"
 echo ""
-echo "Run ~/bitcoin-node/scripts/check-sync.sh for Bitcoin sync status"
+echo "Run ./check-sync.sh for Bitcoin sync status"
 EOF
 
-    chmod +x $BITCOIN_DIR/scripts/*.sh
-}
-
-create_systemd_service() {
-    # Create systemd service for automatic startup
-    sudo tee /etc/systemd/system/bitcoin-node.service > /dev/null << EOF
-[Unit]
-Description=Bitcoin Node Docker Compose
-Requires=docker.service
-After=docker.service network-online.target
-Wants=network-online.target
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-User=$USER
-Group=$(id -gn)
-WorkingDirectory=$HOME/bitcoin-node
-ExecStart=/usr/bin/docker compose up -d
-ExecStop=/usr/bin/docker compose down
-StandardOutput=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    sudo systemctl daemon-reload
-    sudo systemctl enable bitcoin-node.service
+    chmod +x /opt/bitcoin/scripts/*.sh
 }
 
 # =============================================================================
@@ -574,26 +639,26 @@ setup_automation() {
     log_section "Setting Up Automation"
     
     # Create backup script
-    cat > $BITCOIN_DIR/scripts/backup.sh << 'EOF'
+    cat > /opt/bitcoin/scripts/backup.sh << 'EOF'
 #!/bin/bash
-BACKUP_DIR="$HOME/bitcoin-node/backups"
+BACKUP_DIR="/opt/bitcoin/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 mkdir -p $BACKUP_DIR
 
 tar -czf $BACKUP_DIR/configs_$DATE.tar.gz \
-    $HOME/bitcoin-node/configs \
-    $HOME/bitcoin-node/docker-compose.yml \
-    $HOME/bitcoin-node/scripts \
-    $HOME/bitcoin-node/setup-config.env 2>/dev/null
+    /opt/bitcoin/configs \
+    /opt/bitcoin/docker-compose.yml \
+    /opt/bitcoin/scripts \
+    /root/setup-config.env 2>/dev/null
 
 find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
 echo "Backup completed: $DATE"
 EOF
 
-    chmod +x $BITCOIN_DIR/scripts/backup.sh
+    chmod +x /opt/bitcoin/scripts/backup.sh
     
     # Add cron job
-    (crontab -l 2>/dev/null || true; echo "0 3 * * * $BITCOIN_DIR/scripts/backup.sh > $BITCOIN_DIR/logs/backup.log 2>&1") | crontab -
+    (crontab -l 2>/dev/null || true; echo "0 3 * * * /opt/bitcoin/scripts/backup.sh > /opt/bitcoin/logs/backup.log 2>&1") | crontab -
     
     log_success "Automation configured"
 }
@@ -603,7 +668,7 @@ EOF
 # =============================================================================
 
 show_next_steps() {
-    TAILSCALE_IP=$(cat ~/.bitcoin/.tailscale_ip 2>/dev/null || echo "Not connected")
+    TAILSCALE_IP=$(cat /opt/bitcoin/.tailscale_ip 2>/dev/null || echo "Not connected")
     
     clear
     echo "=========================================="
@@ -611,52 +676,45 @@ show_next_steps() {
     echo "=========================================="
     echo ""
     echo "Version: $VERSION"
-    echo "User: $USER"
-    echo "Bitcoin Directory: ~/bitcoin-node"
+    echo "User: $ADMIN_USER"
     echo "Tailscale: $TAILSCALE_IP"
     echo ""
     echo "📋 Next Steps:"
     echo ""
     echo "1. Monitor Bitcoin sync (2-5 days):"
-    echo "   ~/bitcoin-node/scripts/check-sync.sh"
+    echo "   /opt/bitcoin/scripts/check-sync.sh"
     echo ""
     echo "2. When sync reaches 90%+:"
-    echo "   ~/bitcoin-node/scripts/enable-all-services.sh"
+    echo "   /opt/bitcoin/scripts/enable-all-services.sh"
     echo ""
     echo "3. Check status anytime:"
-    echo "   ~/bitcoin-node/scripts/status.sh"
+    echo "   /opt/bitcoin/scripts/status.sh"
     echo ""
     echo "📁 Key Locations:"
-    echo "- Config: ~/bitcoin-node/setup-config.env"
-    echo "- Scripts: ~/bitcoin-node/scripts/"
-    echo "- Data: ~/bitcoin-node/data/"
-    echo "- Logs: ~/bitcoin-node/logs/"
+    echo "- Config: ~/setup-config.env"
+    echo "- Scripts: /opt/bitcoin/scripts/"
+    echo "- Data: /opt/bitcoin/data/"
+    echo "- Logs: /opt/bitcoin/logs/"
     echo ""
     echo "🔐 Security:"
     echo "- All services accessible via Tailscale only"
-    echo "- No root access required for management"
     echo "- Firewall configured"
     echo "- Daily backups at 3 AM"
     echo ""
-    echo "⚠️  IMPORTANT: Log out and back in for docker group access"
-    echo ""
     
     # Save setup info
-    cat > $BITCOIN_DIR/SETUP_INFO.txt << EOF
+    cat > /opt/bitcoin/SETUP_INFO.txt << EOF
 Bitcoin Node Setup Information
 ==============================
 Date: $(date)
 Version: $VERSION
-User: $USER
 Domain: $DOMAIN_NAME
-Bitcoin Directory: $HOME/bitcoin-node
+Admin User: $ADMIN_USER
 Tailscale IP: $TAILSCALE_IP
 
-To check sync: ~/bitcoin-node/scripts/check-sync.sh
-To enable all: ~/bitcoin-node/scripts/enable-all-services.sh
-To see status: ~/bitcoin-node/scripts/status.sh
-
-Security Note: Everything runs as $USER, not root!
+To check sync: /opt/bitcoin/scripts/check-sync.sh
+To enable all: /opt/bitcoin/scripts/enable-all-services.sh
+To see status: /opt/bitcoin/scripts/status.sh
 EOF
 }
 
@@ -665,22 +723,17 @@ EOF
 # =============================================================================
 
 main() {
-    log_section "Bitcoin Node Setup v${VERSION} - Ubuntu User Version"
+    log_section "Bitcoin Node Setup v${VERSION}"
     
     # Check configuration
     check_config
-    
-    # Copy config to bitcoin directory if not there
-    if [[ ! -f "$HOME/bitcoin-node/setup-config.env" ]]; then
-        mkdir -p "$HOME/bitcoin-node"
-        cp "$SCRIPT_DIR/setup-config.env" "$HOME/bitcoin-node/setup-config.env"
-    fi
     
     # Validate system
     validate_system
     
     # Run setup steps
     initial_setup
+    setup_user
     setup_security
     setup_tailscale
     setup_docker
